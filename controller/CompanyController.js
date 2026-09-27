@@ -1,5 +1,7 @@
 const Companies = require("../modals/Comapnies");
 const { hashPassword, authenticateCompany } = require("../helpers/helper");
+const { createCompanyToken } = require("../helpers/token");
+const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 
 function serializeCompany(company) {
   const data = company.toJSON();
@@ -9,33 +11,8 @@ function serializeCompany(company) {
 
 module.exports = function(app) {
 
-  app.get("/api/comapny", async function(req, res) {
+  app.get("/api/company", requireCompanyAuth, async function(req, res) {
     try {
-      const body = req.body || {};
-      const adminid = typeof body.adminid === "string"
-        ? body.adminid.trim()
-        : (typeof body.username === "string" ? body.username.trim() : "");
-      const password = typeof body.password === "string" ? body.password : "";
-
-      if (!adminid || !password) {
-        return res.status(422).json({
-          error: "Validation failed.",
-          fields: {
-            ...(!adminid ? { adminid: "Admin ID is required." } : {}),
-            ...(!password ? { password: "Password is required." } : {})
-          }
-        });
-      }
-
-      const authentication = await authenticateCompany(adminid, password);
-      if (!authentication.company || !authentication.isPasswordValid) {
-        return res.status(401).json({ error: "Invalid admin ID or password." });
-      }
-
-      if (authentication.company.status !== "active") {
-        return res.status(403).json({ error: "Company account is inactive." });
-      }
-
       const companies = await Companies.findAll();
       return res.status(200).json(companies);
     } catch (error) {
@@ -130,6 +107,7 @@ module.exports = function(app) {
 
       return res.status(200).json({
         message: "Company successfully logged in.",
+        token: createCompanyToken(authentication.company),
         company: serializeCompany(authentication.company)
       });
     } catch (error) {
