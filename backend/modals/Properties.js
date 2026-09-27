@@ -1,43 +1,94 @@
 const db = require("../config/db");
 const Sequelize = require("sequelize");
 
-module.exports = db.define("Properties", {
-  rent_sale: {
-    type: Sequelize.STRING,
-    allowNull: false,
-    validate: {
-      notEmpty: true
-    }
+module.exports = db.define(
+  "Properties",
+  {
+    rent_sale: {
+      type: Sequelize.ENUM("rent", "sale"),
+      allowNull: false,
+    },
+
+    price: {
+      type: Sequelize.DECIMAL(15, 2),
+      allowNull: false,
+    },
+
+    property_type: {
+      type: Sequelize.STRING,
+      allowNull: false,
+      defaultValue: "Villa",
+    },
+
+    bedrooms: {
+      type: Sequelize.INTEGER,
+      allowNull: false,
+    },
+
+    maid_room: {
+      type: Sequelize.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    bathrooms: {
+      type: Sequelize.INTEGER,
+      allowNull: false,
+    },
+
+    furnishing: {
+      type: Sequelize.ENUM(
+        "furnished",
+        "unfurnished",
+        "semi-furnished"
+      ),
+      allowNull: false,
+      defaultValue: "unfurnished",
+    },
+
+    area: {
+      type: Sequelize.DECIMAL(12, 2),
+      allowNull: false,
+    },
+
+    area_unit: {
+      type: Sequelize.ENUM("sqft", "sqm"),
+      allowNull: false,
+      defaultValue: "sqft",
+    },
+
+    available_from: {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    },
+
+    allowed_nationalities: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
+    status: {
+      type: Sequelize.ENUM("inactive", "active"),
+      allowNull: false,
+      defaultValue: "inactive",
+    },
+
+    lat: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
+    long: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
+    description: {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    },
   },
-  price: {
-    type: Sequelize.INTEGER,
-    allowNull: false,
-    validate: {
-      notEmpty: true
-    }
-  },
-  checks: {
-    type: Sequelize.NUMBER,
-    allowNull: false,
-    validate: {
-      notEmpty: true
-    }
-  },
-  bedrooms: Sequelize.NUMBER,
-  washrooms: Sequelize.NUMBER,
-  allowed_nationalities: Sequelize.NUMBER,
-  status: {
-    type: Sequelize.ENUM("inactive", "active"),
-    allowNull: false,
-    defaultValue: "inactive"
-  },
-  lat: Sequelize.STRING,
-  long: Sequelize.STRING,
-  description: Sequelize.STRING,
-}, {
-  // defaultScope: {
-  //   attributes: {
-  //     exclude: ["password"]
-  //   }
-  // }
-});
+  {
+    timestamps: true,
+  }
+);

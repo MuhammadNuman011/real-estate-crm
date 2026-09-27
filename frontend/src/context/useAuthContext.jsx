@@ -1,4 +1,4 @@
-import { deleteCookie, getCookie, hasCookie, setCookie } from 'cookies-next';
+import { deleteCookie, getCookie, setCookie } from 'cookies-next';
 import { createContext, useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 const AuthContext = createContext(undefined);
@@ -20,17 +20,17 @@ export function AuthProvider({
   };
   const [user, setUser] = useState(getSession());
   const saveSession = user => {
-    setCookie(authSessionKey, JSON.stringify(user));
+    setCookie(authSessionKey, JSON.stringify(user), { path: '/' });
     setUser(user);
   };
   const removeSession = () => {
-    deleteCookie(authSessionKey);
+    deleteCookie(authSessionKey, { path: '/' });
     setUser(undefined);
-    navigate('/auth/sign-in');
+    navigate('/auth/sign-in', { replace: true });
   };
   return <AuthContext.Provider value={{
     user,
-    isAuthenticated: hasCookie(authSessionKey),
+    isAuthenticated: Boolean(user),
     saveSession,
     removeSession
   }}>

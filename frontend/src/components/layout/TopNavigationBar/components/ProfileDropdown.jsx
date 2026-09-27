@@ -2,7 +2,13 @@ import { Link } from 'react-router-dom';
 import { Dropdown, DropdownDivider, DropdownHeader, DropdownItem, DropdownMenu, DropdownToggle } from 'react-bootstrap';
 import IconifyIcon from '@/components/wrappers/IconifyIcon';
 import avatar1 from '@/assets/images/users/avatar-1.jpg';
+import { useAuthContext } from '@/context/useAuthContext';
 const ProfileDropdown = () => {
+  const {
+    removeSession,
+    user
+  } = useAuthContext();
+  const displayName = user?.company?.name || user?.company?.adminid || user?.name || user?.adminid || 'there';
   return <Dropdown className="topbar-item" align={'end'}>
       <DropdownToggle as="button" type="button" className="topbar-button content-none" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
         <span className="d-flex align-items-center">
@@ -10,7 +16,7 @@ const ProfileDropdown = () => {
         </span>
       </DropdownToggle>
       <DropdownMenu>
-        <DropdownHeader as="h6">Welcome Gaston!</DropdownHeader>
+        <DropdownHeader as="h6">Welcome {displayName}!</DropdownHeader>
         <DropdownItem as={Link} to="/pages/profile">
           <IconifyIcon icon="bx:user-circle" className="text-muted fs-18 align-middle me-1" />
           <span className="align-middle">Profile</span>
@@ -32,7 +38,7 @@ const ProfileDropdown = () => {
           <span className="align-middle">Lock screen</span>
         </DropdownItem>
         <DropdownDivider className="dropdown-divider my-1" />
-        <DropdownItem as={Link} className="text-danger" to="/auth/sign-in">
+        <DropdownItem as="button" type="button" className="text-danger" onClick={removeSession}>
           <IconifyIcon icon="bx:log-out" className="fs-18 align-middle me-1" />
           <span className="align-middle">Logout</span>
         </DropdownItem>

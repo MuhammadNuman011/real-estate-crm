@@ -6,6 +6,11 @@ const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'));
 const Finance = lazy(() => import('@/app/(admin)/dashboard/finance/page'));
 const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'));
 const Companies = lazy(() => import('@/app/(admin)/companies/page'));
+const Properties = lazy(() => import('@/app/(admin)/properties/page'));
+const AddProperty = lazy(() => import('@/app/(admin)/properties/add/page'));
+const Brokers = lazy(() => import('@/app/(admin)/brokers/page'));
+const AddBroker = lazy(() => import('@/app/(admin)/brokers/add/page'));
+const EditBroker = lazy(() => import('@/app/(admin)/brokers/[id]/edit/page'));
 
 // Apps Routes
 const EcommerceProducts = lazy(() => import('@/app/(admin)/ecommerce/products/page'));
@@ -150,6 +155,26 @@ const generalRoutes = [{
   path: '/companies',
   name: 'Companies',
   element: <Companies />
+}, {
+  path: '/properties',
+  name: 'Properties',
+  element: <Properties />
+}, {
+  path: '/properties/add',
+  name: 'Add property',
+  element: <AddProperty />
+}, {
+  path: '/brokers',
+  name: 'Brokers',
+  element: <Brokers />
+}, {
+  path: '/brokers/add',
+  name: 'Add broker',
+  element: <AddBroker />
+}, {
+  path: '/brokers/:id/edit',
+  name: 'Update broker',
+  element: <EditBroker />
 }];
 const appsRoutes = [{
   name: 'Products',
@@ -556,4 +581,4 @@ export const authRoutes = [{
   path: '/coming-soon',
   element: <ComingSoon />
 }];
-export const appRoutes = [...initialRoutes, ...generalRoutes, ...appsRoutes, ...customRoutes, ...baseUIRoutes, ...advancedUIRoutes, ...chartsNMapsRoutes, ...formsRoutes, ...tableRoutes, ...iconRoutes, ...authRoutes];
+export const appRoutes = [...initialRoutes, ...generalRoutes, ...appsRoutes, ...customRoutes, ...baseUIRoutes, ...advancedUIRoutes, ...chartsNMapsRoutes, ...formsRoutes, ...tableRoutes, ...iconRoutes];

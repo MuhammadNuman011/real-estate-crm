@@ -8,6 +8,7 @@ const Config = require("./config/config");
 const db = require("./config/db");
 
 app.use(express.json({ limit: "50mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use(function(req, res, next) {
   if (Config.frontendUrl) {
