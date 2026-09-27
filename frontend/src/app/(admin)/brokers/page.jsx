@@ -41,13 +41,7 @@ const columns = [{
   id: 'status',
   name: 'Status',
   formatter: cell => statusBadge(cell)
-}, {
-  id: 'email_verified',
-  name: 'Email verified'
-}, {
-  id: 'mobile_verified',
-  name: 'Mobile verified'
-}, {
+},  {
   id: 'id',
   name: 'Actions',
   sort: false,
@@ -57,12 +51,6 @@ const columns = [{
   }, 'Edit')
 }];
 
-function formatVerified(value) {
-  if (value === true || value === 1 || value === '1' || value === 'true') return 'Yes';
-  if (value === false || value === 0 || value === '0' || value === 'false') return 'No';
-  return '';
-}
-
 function toRow(broker) {
   return {
     id: broker.id ?? '',
@@ -71,9 +59,7 @@ function toRow(broker) {
     email: broker.email ?? '',
     mobile: broker.mobile ?? '',
     license_number: broker.license_number ?? '',
-    status: broker.status ?? '',
-    email_verified: formatVerified(broker.email_verified),
-    mobile_verified: formatVerified(broker.mobile_verified)
+    status: broker.status ?? ''
   };
 }
 

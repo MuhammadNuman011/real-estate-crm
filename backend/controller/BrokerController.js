@@ -135,13 +135,6 @@ function validateBroker(body, options) {
     errors.status = "Status must be active, inactive, or blocked.";
   }
 
-  if (typeof body.email_verified !== "boolean") {
-    errors.email_verified = "Email verified is required.";
-  }
-  if (typeof body.mobile_verified !== "boolean") {
-    errors.mobile_verified = "Mobile verified is required.";
-  }
-
   const licenseNumber = optionalText(body.license_number);
   const bio = optionalText(body.bio);
   const address = optionalText(body.address);
@@ -158,8 +151,6 @@ function validateBroker(body, options) {
       mobile: normalizedMobile.mobile || "",
       password: password,
       status: status,
-      email_verified: body.email_verified === true,
-      mobile_verified: body.mobile_verified === true,
       license_number: licenseNumber || null,
       bio: bio || null,
       address: address || null
@@ -297,8 +288,6 @@ module.exports = function(app) {
         password: await hashPassword(parsed.values.password),
         profile_picture: picture.path,
         status: parsed.values.status,
-        email_verified: parsed.values.email_verified,
-        mobile_verified: parsed.values.mobile_verified,
         company_id: companyId(req),
         license_number: parsed.values.license_number,
         bio: parsed.values.bio,
@@ -356,8 +345,6 @@ module.exports = function(app) {
         mobile: parsed.values.mobile,
         profile_picture: picture.path,
         status: parsed.values.status,
-        email_verified: parsed.values.email_verified,
-        mobile_verified: parsed.values.mobile_verified,
         license_number: parsed.values.license_number,
         bio: parsed.values.bio,
         address: parsed.values.address

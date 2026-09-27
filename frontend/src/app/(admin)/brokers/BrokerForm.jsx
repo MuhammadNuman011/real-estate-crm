@@ -55,8 +55,6 @@ const schema = yup.object({
     return true;
   }),
   status: yup.string().oneOf(['active', 'inactive', 'blocked'], 'Status is required').required('Status is required'),
-  email_verified: yup.boolean().required(),
-  mobile_verified: yup.boolean().required(),
   license_number: yup.string().trim().default(''),
   bio: yup.string().trim().default(''),
   address: yup.string().trim().default('')
@@ -69,8 +67,6 @@ const defaultValues = {
   mobile: '',
   password: '',
   status: 'active',
-  email_verified: false,
-  mobile_verified: false,
   license_number: '',
   bio: '',
   address: ''
@@ -123,8 +119,6 @@ const BrokerForm = ({ mode }) => {
           mobile: mobileParts.mobile,
           password: '',
           status: broker.status ?? 'active',
-          email_verified: Boolean(broker.email_verified),
-          mobile_verified: Boolean(broker.mobile_verified),
           license_number: broker.license_number ?? '',
           bio: broker.bio ?? '',
           address: broker.address ?? ''
@@ -185,8 +179,6 @@ const BrokerForm = ({ mode }) => {
       mobile: values.mobile.trim(),
       profile_picture: profilePicture,
       status: values.status,
-      email_verified: Boolean(values.email_verified),
-      mobile_verified: Boolean(values.mobile_verified),
       license_number: values.license_number?.trim() || null,
       bio: values.bio?.trim() || null,
       address: values.address?.trim() || null
@@ -318,12 +310,6 @@ const BrokerForm = ({ mode }) => {
                     <Form.Control as="textarea" rows={4} {...register('bio')} isInvalid={Boolean(errors.bio)} />
                     <Form.Control.Feedback type="invalid">{errors.bio?.message}</Form.Control.Feedback>
                   </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Check type="checkbox" id="email_verified" label="Email verified" {...register('email_verified')} isInvalid={Boolean(errors.email_verified)} />
-                </Col>
-                <Col md={6}>
-                  <Form.Check type="checkbox" id="mobile_verified" label="Mobile verified" {...register('mobile_verified')} isInvalid={Boolean(errors.mobile_verified)} />
                 </Col>
                 <Col xs={12} className="d-flex gap-2">
                   <Button type="submit" disabled={loading}>

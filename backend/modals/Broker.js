@@ -53,18 +53,6 @@ module.exports = db.define(
       defaultValue: "active",
     },
 
-    email_verified: {
-      type: Sequelize.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-
-    mobile_verified: {
-      type: Sequelize.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-
     company_id: {
       type: Sequelize.STRING,
       allowNull: true,
