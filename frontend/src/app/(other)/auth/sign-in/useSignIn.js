@@ -44,6 +44,7 @@ const useSignIn = () => {
       if (res.data?.token) {
         saveSession({
           ...(res.data ?? {}),
+          role: 'company',
           token: res.data.token
         });
         redirectUser();

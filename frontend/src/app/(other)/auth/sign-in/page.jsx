@@ -47,6 +47,12 @@ const SignIn = () => {
           Sign Up
         </Link>
       </p>
+      <p className="text-white mb-0 text-center">
+        Are you a broker?
+        <Link to="/auth/broker-sign-in" className="text-white fw-bold ms-1">
+          Broker sign in
+        </Link>
+      </p>
     </>;
 };
 export default SignIn;

@@ -1,5 +1,6 @@
 const Properties = require("../modals/Properties");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
+const requireBrokerAuth = require("../middleware/requireBrokerAuth");
 
 function trimmed(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -42,6 +43,20 @@ const LIST_ATTRIBUTES = [
 ];
 
 module.exports = function(app) {
+  app.get("/api/broker/properties", requireBrokerAuth, async function(req, res) {
+    try {
+      const properties = await Properties.findAll({
+        attributes: LIST_ATTRIBUTES,
+        where: { status: "active" },
+        order: [["createdAt", "DESC"]]
+      });
+      return res.status(200).json(properties);
+    } catch (error) {
+      console.error("Get broker properties failed:", error);
+      return res.status(500).json({ error: "Unable to retrieve properties." });
+    }
+  });
+
   app.get("/api/properties", requireCompanyAuth, async function(req, res) {
     try {
       const properties = await Properties.findAll({

@@ -1,5 +1,6 @@
 import { lazy } from 'react';
 import { Suspense } from 'react';
+import { useAuthContext } from '@/context/useAuthContext';
 import ActivityStreamToggle from './components/ActivityStreamToggle';
 import LeftSideBarToggle from './components/LeftSideBarToggle';
 import ProfileDropdown from './components/ProfileDropdown';
@@ -9,35 +10,30 @@ import ThemeModeToggle from './components/ThemeModeToggle';
 const AppsDropdown = lazy(() => import('./components/AppsDropdown'));
 const Notifications = lazy(() => import('./components/Notifications'));
 const TopNavigationBar = () => {
+  const { user } = useAuthContext();
+  const isBroker = user?.role === 'broker';
   return <header className="topbar">
       <div className="container-xxl">
         <div className="navbar-header">
           <div className="d-flex align-items-center gap-2">
             <LeftSideBarToggle />
 
-            <SearchBox />
+            {!isBroker && <SearchBox />}
           </div>
           <div className="d-flex align-items-center gap-1">
-            {/* Toggle Theme Mode */}
             <ThemeModeToggle />
 
-            {/* Apps Dropdown */}
-            <Suspense>
-              <AppsDropdown />
-            </Suspense>
+            {!isBroker && <>
+              <Suspense>
+                <AppsDropdown />
+              </Suspense>
+              <Suspense>
+                <Notifications />
+              </Suspense>
+              <ThemeCustomizerToggle />
+              <ActivityStreamToggle />
+            </>}
 
-            {/* Notification Dropdown */}
-            <Suspense>
-              <Notifications />
-            </Suspense>
-
-            {/* Toggle for Theme Customizer */}
-            <ThemeCustomizerToggle />
-
-            {/* Toggle for Activity Stream */}
-            <ActivityStreamToggle />
-
-            {/* Admin Profile Dropdown */}
             <ProfileDropdown />
           </div>
         </div>

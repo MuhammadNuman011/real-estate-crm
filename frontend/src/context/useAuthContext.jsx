@@ -24,9 +24,10 @@ export function AuthProvider({
     setUser(user);
   };
   const removeSession = () => {
+    const loginPath = user?.role === 'broker' ? '/auth/broker-sign-in' : '/auth/sign-in';
     deleteCookie(authSessionKey, { path: '/' });
     setUser(undefined);
-    navigate('/auth/sign-in', { replace: true });
+    navigate(loginPath, { replace: true });
   };
   return <AuthContext.Provider value={{
     user,

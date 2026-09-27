@@ -6,6 +6,7 @@ import { Grid } from 'gridjs-react';
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import httpClient from '@/helpers/httpClient';
+import { statusBadge } from '@/helpers/statusBadge';
 
 const columns = [{
   id: 'profile_picture',
@@ -38,7 +39,8 @@ const columns = [{
   name: 'License'
 }, {
   id: 'status',
-  name: 'Status'
+  name: 'Status',
+  formatter: cell => statusBadge(cell)
 }, {
   id: 'email_verified',
   name: 'Email verified'

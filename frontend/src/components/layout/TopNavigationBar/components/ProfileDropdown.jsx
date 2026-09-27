@@ -8,35 +8,38 @@ const ProfileDropdown = () => {
     removeSession,
     user
   } = useAuthContext();
-  const displayName = user?.company?.name || user?.company?.adminid || user?.name || user?.adminid || 'there';
+  const isBroker = user?.role === 'broker';
+  const displayName = user?.broker?.name || user?.company?.name || user?.company?.adminid || user?.name || user?.adminid || 'there';
   return <Dropdown className="topbar-item" align={'end'}>
       <DropdownToggle as="button" type="button" className="topbar-button content-none" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
         <span className="d-flex align-items-center">
-          <img className="rounded-circle" width={32} height={32} src={avatar1} alt="avatar-3" />
+          <img className="rounded-circle" width={32} height={32} src={avatar1} alt="avatar" />
         </span>
       </DropdownToggle>
       <DropdownMenu>
         <DropdownHeader as="h6">Welcome {displayName}!</DropdownHeader>
-        <DropdownItem as={Link} to="/pages/profile">
-          <IconifyIcon icon="bx:user-circle" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Profile</span>
-        </DropdownItem>
-        <DropdownItem as={Link} to="/apps/chat">
-          <IconifyIcon icon="bx:message-dots" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Messages</span>
-        </DropdownItem>
-        <DropdownItem as={Link} to="/pages/pricing">
-          <IconifyIcon icon="bx:wallet" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Pricing</span>
-        </DropdownItem>
-        <DropdownItem as={Link} to="/pages/faqs">
-          <IconifyIcon icon="bx:help-circle" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Help</span>
-        </DropdownItem>
-        <DropdownItem as={Link} to="/auth/lock-screen">
-          <IconifyIcon icon="bx:lock" className="text-muted fs-18 align-middle me-1" />
-          <span className="align-middle">Lock screen</span>
-        </DropdownItem>
+        {!isBroker && <>
+          <DropdownItem as={Link} to="/pages/profile">
+            <IconifyIcon icon="bx:user-circle" className="text-muted fs-18 align-middle me-1" />
+            <span className="align-middle">Profile</span>
+          </DropdownItem>
+          <DropdownItem as={Link} to="/apps/chat">
+            <IconifyIcon icon="bx:message-dots" className="text-muted fs-18 align-middle me-1" />
+            <span className="align-middle">Messages</span>
+          </DropdownItem>
+          <DropdownItem as={Link} to="/pages/pricing">
+            <IconifyIcon icon="bx:wallet" className="text-muted fs-18 align-middle me-1" />
+            <span className="align-middle">Pricing</span>
+          </DropdownItem>
+          <DropdownItem as={Link} to="/pages/faqs">
+            <IconifyIcon icon="bx:help-circle" className="text-muted fs-18 align-middle me-1" />
+            <span className="align-middle">Help</span>
+          </DropdownItem>
+          <DropdownItem as={Link} to="/auth/lock-screen">
+            <IconifyIcon icon="bx:lock" className="text-muted fs-18 align-middle me-1" />
+            <span className="align-middle">Lock screen</span>
+          </DropdownItem>
+        </>}
         <DropdownDivider className="dropdown-divider my-1" />
         <DropdownItem as="button" type="button" className="text-danger" onClick={removeSession}>
           <IconifyIcon icon="bx:log-out" className="fs-18 align-middle me-1" />

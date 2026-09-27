@@ -2,11 +2,13 @@ import { lazy, Suspense } from 'react';
 import FallbackLoading from '@/components/FallbackLoading';
 import LogoBox from '@/components/LogoBox';
 import SimplebarReactClient from '@/components/wrappers/SimplebarReactClient';
+import { useAuthContext } from '@/context/useAuthContext';
 import { getMenuItems } from '@/helpers/menu';
 import HoverMenuToggle from './components/HoverMenuToggle';
 const AppMenu = lazy(() => import('./components/AppMenu'));
 const VerticalNavigationBar = () => {
-  const menuItems = getMenuItems();
+  const { user } = useAuthContext();
+  const menuItems = getMenuItems(user?.role);
   return <div className="main-nav" id="leftside-menu-container">
       <LogoBox containerClassName="logo-box" squareLogo={{
       className: 'logo-sm'

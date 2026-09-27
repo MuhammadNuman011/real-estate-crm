@@ -1,5 +1,8 @@
 import { MENU_ITEMS } from '@/assets/data/menu-items';
-export const getMenuItems = () => {
+export const getMenuItems = (role) => {
+  if (role === 'broker') {
+    return MENU_ITEMS.filter((item) => item.key === 'properties');
+  }
   return MENU_ITEMS;
 };
 export const findAllParent = (menuItems, menuItem) => {

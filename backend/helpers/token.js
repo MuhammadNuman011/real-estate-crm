@@ -4,8 +4,22 @@ const Config = require("../config/config");
 function createCompanyToken(company) {
   return jwt.sign(
     {
+      role: "company",
       companyId: company.id,
       adminid: company.adminid
+    },
+    Config.jwtSecret,
+    {
+      expiresIn: Config.jwtExpiresIn
+    }
+  );
+}
+
+function createBrokerToken(broker) {
+  return jwt.sign(
+    {
+      role: "broker",
+      brokerId: broker.id
     },
     Config.jwtSecret,
     {
@@ -33,6 +47,7 @@ function verifyCompanyToken(token) {
 
 module.exports = {
   createCompanyToken,
+  createBrokerToken,
   readBearerToken,
   verifyCompanyToken
 };

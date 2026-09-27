@@ -3,7 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const { Op } = require("sequelize");
 const Brokers = require("../modals/Broker");
-const { hashPassword } = require("../helpers/helper");
+const { hashPassword, authenticateBroker } = require("../helpers/helper");
+const { createBrokerToken } = require("../helpers/token");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/brokers");
@@ -195,6 +196,46 @@ function uniqueConstraintResponse(error) {
 }
 
 module.exports = function(app) {
+  app.post("/api/broker/login", async function(req, res) {
+    try {
+      const body = req.body || {};
+      const email = trimmed(body.email).toLowerCase();
+      const password = typeof body.password === "string" ? body.password : "";
+
+      const errors = {};
+      if (!email) {
+        errors.email = "Email is required.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.email = "Email must be valid.";
+      }
+      if (!password) errors.password = "Password is required.";
+
+      if (Object.keys(errors).length) {
+        return res.status(422).json({ error: "Validation failed.", fields: errors });
+      }
+
+      const authentication = await authenticateBroker(email, password);
+      if (!authentication.broker || !authentication.isPasswordValid) {
+        return res.status(401).json({ error: "Invalid email or password." });
+      }
+
+      if (authentication.broker.status !== "active") {
+        return res.status(403).json({ error: "Broker account is inactive." });
+      }
+
+      await authentication.broker.update({ last_login_at: new Date() });
+
+      return res.status(200).json({
+        message: "Broker successfully logged in.",
+        token: createBrokerToken(authentication.broker),
+        broker: serializeBroker(authentication.broker)
+      });
+    } catch (error) {
+      console.error("Broker login failed:", error);
+      return res.status(500).json({ error: "Unable to log in." });
+    }
+  });
+
   app.get("/api/brokers", requireCompanyAuth, async function(req, res) {
     try {
       const brokers = await Brokers.findAll({

@@ -1,6 +1,7 @@
 const { promisify } = require("util");
 const crypto = require("crypto");
 const Companies = require("../modals/Comapnies");
+const Brokers = require("../modals/Broker");
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -40,7 +41,23 @@ async function authenticateCompany(adminid, password) {
   };
 }
 
+async function authenticateBroker(email, password) {
+  const broker = await Brokers.unscoped().findOne({
+    where: { email: email }
+  });
+
+  if (!broker) {
+    return { broker: null, isPasswordValid: false };
+  }
+
+  return {
+    broker: broker,
+    isPasswordValid: await passwordMatches(password, broker.password)
+  };
+}
+
 module.exports = {
   hashPassword,
-  authenticateCompany
+  authenticateCompany,
+  authenticateBroker
 };

@@ -4,7 +4,9 @@ import { Link } from 'react-router-dom';
 import { Grid } from 'gridjs-react';
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
+import { useAuthContext } from '@/context/useAuthContext';
 import httpClient from '@/helpers/httpClient';
+import { statusBadge } from '@/helpers/statusBadge';
 
 const columns = [{
   id: 'property_type',
@@ -29,7 +31,8 @@ const columns = [{
   name: 'Maid room'
 }, {
   id: 'status',
-  name: 'Status'
+  name: 'Status',
+  formatter: cell => statusBadge(cell)
 }];
 
 function formatPrice(value) {
@@ -59,6 +62,8 @@ function toRow(property) {
 }
 
 const PropertiesPage = () => {
+  const { user } = useAuthContext();
+  const isBroker = user?.role === 'broker';
   const [properties, setProperties] = useState(null);
   const [error, setError] = useState('');
 
@@ -66,7 +71,7 @@ const PropertiesPage = () => {
     let active = true;
     (async () => {
       try {
-        const res = await httpClient.get('/api/properties');
+        const res = await httpClient.get(isBroker ? '/api/broker/properties' : '/api/properties');
         if (!active) return;
         const rows = Array.isArray(res.data) ? res.data.map(toRow) : [];
         setProperties(rows);
@@ -79,7 +84,7 @@ const PropertiesPage = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isBroker]);
 
   return <>
       <PageMetaData title="Properties" />
@@ -90,9 +95,9 @@ const PropertiesPage = () => {
             <CardTitle as="h5" className="mb-0">
               Properties
             </CardTitle>
-            <Button as={Link} to="/properties/add">
+            {!isBroker && <Button as={Link} to="/properties/add">
               Add property
-            </Button>
+            </Button>}
           </div>
           {error && <Alert variant="danger">{error}</Alert>}
           {properties === null ? <div className="text-center py-5">

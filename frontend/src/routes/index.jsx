@@ -123,6 +123,7 @@ const NotFound2 = lazy(() => import('@/app/(other)/(error-pages)/error-404-2/pag
 
 // Auth Routes
 const AuthSignIn = lazy(() => import('@/app/(other)/auth/sign-in/page'));
+const AuthBrokerSignIn = lazy(() => import('@/app/(other)/auth/broker-sign-in/page'));
 const AuthSignIn2 = lazy(() => import('@/app/(other)/auth/sign-in-2/page'));
 const AuthSignUp = lazy(() => import('@/app/(other)/auth/sign-up/page'));
 const AuthSignUp2 = lazy(() => import('@/app/(other)/auth/sign-up-2/page'));
@@ -536,6 +537,10 @@ export const authRoutes = [{
   path: '/auth/sign-in',
   name: 'Sign In',
   element: <AuthSignIn />
+}, {
+  path: '/auth/broker-sign-in',
+  name: 'Broker Sign In',
+  element: <AuthBrokerSignIn />
 }, {
   name: 'Sign In 2',
   path: '/auth/sign-in-2',
