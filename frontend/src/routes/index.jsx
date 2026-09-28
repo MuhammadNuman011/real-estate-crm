@@ -137,7 +137,7 @@ const LockScreen2 = lazy(() => import('@/app/(other)/auth/lock-screen-2/page'));
 const initialRoutes = [{
   path: '/',
   name: 'root',
-  element: <Navigate to="/dashboard/analytics" />
+  element: <Navigate to="/properties" />
 }, {
   path: '*',
   name: 'not-found',

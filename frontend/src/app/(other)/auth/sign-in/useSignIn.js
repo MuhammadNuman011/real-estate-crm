@@ -32,7 +32,11 @@ const useSignIn = () => {
   });
   const redirectUser = () => {
     const redirectLink = searchParams.get('redirectTo');
-    if (redirectLink) navigate(redirectLink);else navigate('/dashboard/analytics');
+    if (redirectLink && redirectLink !== '/' && redirectLink !== '/dashboard/analytics') {
+      navigate(redirectLink);
+      return;
+    }
+    navigate('/properties');
   };
   const login = handleSubmit(async values => {
     setLoading(true);
