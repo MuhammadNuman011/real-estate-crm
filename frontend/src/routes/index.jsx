@@ -129,6 +129,7 @@ const AuthSignIn = lazy(() => import('@/app/(other)/auth/sign-in/page'));
 const AuthBrokerSignIn = lazy(() => import('@/app/(other)/auth/broker-sign-in/page'));
 const AuthSignIn2 = lazy(() => import('@/app/(other)/auth/sign-in-2/page'));
 const AuthSignUp = lazy(() => import('@/app/(other)/auth/sign-up/page'));
+const CompanySignUp = lazy(() => import('@/app/(other)/company/sign-up/page'));
 const AuthSignUp2 = lazy(() => import('@/app/(other)/auth/sign-up-2/page'));
 const ResetPassword = lazy(() => import('@/app/(other)/auth/reset-pass/page'));
 const ResetPassword2 = lazy(() => import('@/app/(other)/auth/reset-pass-2/page'));
@@ -564,6 +565,10 @@ export const authRoutes = [{
   name: 'Sign Up',
   path: '/auth/sign-up',
   element: <AuthSignUp />
+}, {
+  name: 'Company Sign Up',
+  path: '/company/sign-up',
+  element: <CompanySignUp />
 }, {
   name: 'Sign Up 2',
   path: '/auth/sign-up-2',

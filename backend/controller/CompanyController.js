@@ -13,8 +13,11 @@ module.exports = function(app) {
 
   app.get("/api/company", requireCompanyAuth, async function(req, res) {
     try {
-      const companies = await Companies.findAll();
-      return res.status(200).json(companies);
+      const company = await Companies.findByPk(req.company.id);
+      if (!company) {
+        return res.status(404).json({ error: "Company not found." });
+      }
+      return res.status(200).json([serializeCompany(company)]);
     } catch (error) {
       console.error("Get companies failed:", error);
       return res.status(500).json({ error: "Unable to retrieve Companies." });

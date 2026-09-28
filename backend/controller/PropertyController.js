@@ -42,12 +42,19 @@ const LIST_ATTRIBUTES = [
   "status"
 ];
 
+function companyId(req) {
+  return String(req.company.id);
+}
+
 module.exports = function(app) {
   app.get("/api/broker/properties", requireBrokerAuth, async function(req, res) {
     try {
       const properties = await Properties.findAll({
         attributes: LIST_ATTRIBUTES,
-        where: { status: "active" },
+        where: {
+          status: "active",
+          company_id: req.broker.company_id || ""
+        },
         order: [["createdAt", "DESC"]]
       });
       return res.status(200).json(properties);
@@ -61,6 +68,7 @@ module.exports = function(app) {
     try {
       const properties = await Properties.findAll({
         attributes: LIST_ATTRIBUTES,
+        where: { company_id: companyId(req) },
         order: [["createdAt", "DESC"]]
       });
       return res.status(200).json(properties);
@@ -154,7 +162,8 @@ module.exports = function(app) {
         status: status,
         lat: lat,
         long: longitude,
-        description: description
+        description: description,
+        company_id: companyId(req)
       });
 
       return res.status(201).json(property);

@@ -43,7 +43,7 @@ const SignIn = () => {
       </Card>
       <p className="text-white mb-0 text-center">
         Don&apos;t have an account?
-        <Link to="/auth/sign-up" className="text-white fw-bold ms-1">
+        <Link to="/company/sign-up" className="text-white fw-bold ms-1">
           Sign Up
         </Link>
       </p>

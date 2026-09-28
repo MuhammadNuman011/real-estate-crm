@@ -87,6 +87,11 @@ module.exports = db.define(
       type: Sequelize.TEXT,
       allowNull: true,
     },
+
+    company_id: {
+      type: Sequelize.STRING,
+      allowNull: false,
+    },
   },
   {
     timestamps: true,
