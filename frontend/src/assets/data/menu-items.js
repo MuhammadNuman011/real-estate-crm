@@ -24,12 +24,12 @@ export const MENU_ITEMS = [{
 //     parentKey: 'dashboards'
 //   }]
 // }, 
-{
-  key: 'companies',
-  icon: 'iconamoon:profile-circle-duotone',
-  label: 'Companies',
-  url: '/companies'
-}, 
+// {
+//   key: 'companies',
+//   icon: 'iconamoon:profile-circle-duotone',
+//   label: 'Companies',
+//   url: '/companies'
+// }, 
 {
   key: 'properties',
   icon: 'iconamoon:badge-duotone',
@@ -41,6 +41,12 @@ export const MENU_ITEMS = [{
   icon: 'iconamoon:badge-duotone',
   label: 'Brokers',
   url: '/brokers'
+},
+{
+  key: 'owners',
+  icon: 'iconamoon:profile-circle-duotone',
+  label: 'Owners',
+  url: '/owners'
 }, 
 // {
 //   key: 'apps',
