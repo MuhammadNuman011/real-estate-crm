@@ -1,64 +1,87 @@
-import { Map, Marker, GoogleApiWrapper } from 'google-maps-react';
-import { useEffect, useRef } from 'react';
-import { FormControl } from 'react-bootstrap';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, FormControl, InputGroup } from 'react-bootstrap';
+import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
-const MAPS_API_KEY = 'AIzaSyDsucrEdmswqYrw0f6ej3bf4M4suDeRgNA';
-const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 };
+const DEFAULT_CENTER = [25.2048, 55.2708];
 
-const LocationMap = ({ google, lat, lng, onChange }) => {
-  const searchRef = useRef(null);
-  const mapRef = useRef(null);
+const MapInteraction = ({ position, hasPoint, onChange }) => {
+  const map = useMap();
+
+  useMapEvents({
+    click(event) {
+      onChange(String(event.latlng.lat), String(event.latlng.lng));
+    }
+  });
+
+  useEffect(() => {
+    if (hasPoint) map.setView(position, 16);
+  }, [hasPoint, map, position]);
+
+  return hasPoint ? <CircleMarker center={position} radius={8} pathOptions={{
+    color: '#ffffff',
+    fillColor: '#0d6efd',
+    fillOpacity: 1,
+    weight: 3
+  }} /> : null;
+};
+
+const LocationMap = ({ lat, lng, onChange }) => {
+  const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const latNumber = Number(lat);
   const lngNumber = Number(lng);
   const hasPoint = lat !== '' && lng !== '' && Number.isFinite(latNumber) && Number.isFinite(lngNumber);
-  const position = hasPoint ? { lat: latNumber, lng: lngNumber } : DEFAULT_CENTER;
+  const position = useMemo(() => hasPoint ? [latNumber, lngNumber] : DEFAULT_CENTER, [hasPoint, latNumber, lngNumber]);
 
-  useEffect(() => {
-    if (!google?.maps?.places || !searchRef.current) return undefined;
-    const autocomplete = new google.maps.places.Autocomplete(searchRef.current, {
-      fields: ['geometry']
-    });
-    const listener = autocomplete.addListener('place_changed', () => {
-      const location = autocomplete.getPlace()?.geometry?.location;
-      if (!location) return;
-      const nextLat = location.lat();
-      const nextLng = location.lng();
-      onChange(String(nextLat), String(nextLng));
-      if (mapRef.current) {
-        mapRef.current.panTo({ lat: nextLat, lng: nextLng });
-        mapRef.current.setZoom(16);
+  const handleSearch = async event => {
+    event.preventDefault();
+    const query = search.trim();
+    if (!query) return;
+
+    setSearching(true);
+    setSearchError('');
+    try {
+      const params = new URLSearchParams({
+        format: 'jsonv2',
+        q: query,
+        limit: '1'
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+      if (!response.ok) throw new Error('Address search failed.');
+      const results = await response.json();
+      if (!Array.isArray(results) || !results.length) {
+        setSearchError('Address not found.');
+        return;
       }
-    });
-    return () => {
-      google.maps.event.removeListener(listener);
-    };
-  }, [google, onChange]);
-
-  const handleMapClick = (_props, _map, event) => {
-    if (!event?.latLng) return;
-    onChange(String(event.latLng.lat()), String(event.latLng.lng()));
+      onChange(String(results[0].lat), String(results[0].lon));
+    } catch {
+      setSearchError('Unable to search for that address.');
+    } finally {
+      setSearching(false);
+    }
   };
 
   return <>
-      <FormControl ref={searchRef} className="mb-2" placeholder="Search an address" autoComplete="off" />
-      <div className="gmaps" style={{
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-        <Map google={google} zoom={hasPoint ? 15 : 11} center={position} initialCenter={DEFAULT_CENTER} onClick={handleMapClick} onReady={(_props, map) => {
-        mapRef.current = map;
-      }} style={{
+      <form onSubmit={handleSearch}>
+        <InputGroup className="mb-2">
+          <FormControl value={search} onChange={event => setSearch(event.target.value)} placeholder="Search an address" autoComplete="off" />
+          <Button type="submit" disabled={searching || !search.trim()}>
+            {searching ? 'Searching...' : 'Search'}
+          </Button>
+        </InputGroup>
+      </form>
+      {searchError && <div className="text-danger small mb-2">{searchError}</div>}
+      <MapContainer center={position} zoom={hasPoint ? 16 : 11} scrollWheelZoom style={{
         width: '100%',
-        height: '100%',
-        position: 'relative'
+        height: '360px',
+        borderRadius: '0.25rem'
       }}>
-          {hasPoint && <Marker position={position} />}
-        </Map>
-      </div>
+        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapInteraction position={position} hasPoint={hasPoint} onChange={onChange} />
+      </MapContainer>
     </>;
 };
 
-export default GoogleApiWrapper({
-  apiKey: MAPS_API_KEY,
-  libraries: ['places']
-})(LocationMap);
+export default LocationMap;

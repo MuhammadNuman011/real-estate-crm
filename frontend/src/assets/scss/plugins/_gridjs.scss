@@ -64,6 +64,13 @@ td.gridjs-td {
     padding: $table-cell-padding-y $table-cell-padding-x;
 }
 
+.gridjs-table.table-sm {
+    th.gridjs-th,
+    td.gridjs-td {
+        padding: $table-cell-padding-y-sm $table-cell-padding-x-sm;
+    }
+}
+
 th {
     &.gridjs-th {
         border-top: 0;

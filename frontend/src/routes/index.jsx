@@ -8,6 +8,7 @@ const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'));
 const Companies = lazy(() => import('@/app/(admin)/companies/page'));
 const Properties = lazy(() => import('@/app/(admin)/properties/page'));
 const AddProperty = lazy(() => import('@/app/(admin)/properties/add/page'));
+const EditProperty = lazy(() => import('@/app/(admin)/properties/[id]/edit/page'));
 const Brokers = lazy(() => import('@/app/(admin)/brokers/page'));
 const AddBroker = lazy(() => import('@/app/(admin)/brokers/add/page'));
 const EditBroker = lazy(() => import('@/app/(admin)/brokers/[id]/edit/page'));
@@ -168,6 +169,10 @@ const generalRoutes = [{
   path: '/properties/add',
   name: 'Add property',
   element: <AddProperty />
+}, {
+  path: '/properties/:id/edit',
+  name: 'Update property',
+  element: <EditProperty />
 }, {
   path: '/brokers',
   name: 'Brokers',

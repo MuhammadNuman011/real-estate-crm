@@ -106,7 +106,9 @@ const OwnersPage = () => {
           {error && <Alert variant="danger">{error}</Alert>}
           {owners === null ? <div className="text-center py-5">
               <Spinner animation="border" role="status" />
-            </div> : <Grid columns={columns} data={owners} search sort fixedHeader height="420px" pagination={{
+            </div> : <Grid columns={columns} data={owners} className={{
+          table: 'table table-sm'
+        }} search sort fixedHeader height="420px" pagination={{
           limit: 10
         }} />}
         </CardBody>
