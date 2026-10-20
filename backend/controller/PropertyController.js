@@ -42,7 +42,9 @@ const LIST_ATTRIBUTES = [
   "furnishing",
   "maid_room",
   "available_from",
-  "status"
+  "status",
+  "lat",
+  "long"
 ];
 
 function companyId(req) {
