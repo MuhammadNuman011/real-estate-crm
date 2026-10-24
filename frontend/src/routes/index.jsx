@@ -15,6 +15,9 @@ const EditBroker = lazy(() => import('@/app/(admin)/brokers/[id]/edit/page'));
 const Owners = lazy(() => import('@/app/(admin)/owners/page'));
 const AddOwner = lazy(() => import('@/app/(admin)/owners/add/page'));
 const EditOwner = lazy(() => import('@/app/(admin)/owners/[id]/edit/page'));
+const Tenants = lazy(() => import('@/app/(admin)/tenants/page'));
+const AddTenant = lazy(() => import('@/app/(admin)/tenants/add/page'));
+const EditTenant = lazy(() => import('@/app/(admin)/tenants/[id]/edit/page'));
 
 // Apps Routes
 const EcommerceProducts = lazy(() => import('@/app/(admin)/ecommerce/products/page'));
@@ -197,6 +200,18 @@ const generalRoutes = [{
   path: '/owners/:id/edit',
   name: 'Update owner',
   element: <EditOwner />
+}, {
+  path: '/tenants',
+  name: 'Tenants',
+  element: <Tenants />
+}, {
+  path: '/tenants/add',
+  name: 'Add tenant',
+  element: <AddTenant />
+}, {
+  path: '/tenants/:id/edit',
+  name: 'Update tenant',
+  element: <EditTenant />
 }];
 const appsRoutes = [{
   name: 'Products',

@@ -1,4 +1,9 @@
 const Properties = require("../modals/Properties");
+const PropertyContracts = require("../modals/PropertyContract");
+const Brokers = require("../modals/Broker");
+const Owners = require("../modals/Owner");
+const Tenants = require("../modals/Tenant");
+const db = require("../config/db");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 const requireBrokerAuth = require("../middleware/requireBrokerAuth");
 const { Op } = require("sequelize");
@@ -139,8 +144,8 @@ function parseProperty(body) {
   }
 
   const status = trimmed(body.status) || "inactive";
-  if (!["inactive", "active"].includes(status)) {
-    errors.status = "Status must be active or inactive.";
+  if (!["inactive", "active", "rented"].includes(status)) {
+    errors.status = "Status must be active, inactive, or rented.";
   }
 
   let availableFrom = null;
@@ -173,6 +178,188 @@ function parseProperty(body) {
       description: description
     }
   };
+}
+
+function isBlank(value) {
+  return value === "" || value === null || value === undefined;
+}
+
+function requiredId(value, label, errors, field) {
+  if (isBlank(value)) {
+    errors[field] = label + " is required.";
+    return null;
+  }
+
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) {
+    errors[field] = label + " is required.";
+    return null;
+  }
+
+  return number;
+}
+
+function requiredDate(value, label, errors, field) {
+  const date = trimmed(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    errors[field] = label + " is required.";
+    return "";
+  }
+  return date;
+}
+
+function parseContract(body, status) {
+  const errors = {};
+  const brokerBlank = isBlank(body.broker_id);
+  const ownerBlank = isBlank(body.owner_id);
+  const tenantBlank = isBlank(body.tenant_id);
+  const startBlank = !trimmed(body.contract_start_date);
+  const endBlank = !trimmed(body.contract_end_date);
+  const amountBlank = isBlank(body.amount);
+  const anyFilled = !(brokerBlank && ownerBlank && tenantBlank && startBlank && endBlank && amountBlank);
+
+  if (status !== "rented" && !anyFilled) {
+    return { errors: errors, values: null };
+  }
+
+  const brokerId = requiredId(body.broker_id, "Broker who rented the property", errors, "broker_id");
+  const ownerId = requiredId(body.owner_id, "Owner", errors, "owner_id");
+  const tenantId = requiredId(body.tenant_id, "Tenant", errors, "tenant_id");
+  const startDate = requiredDate(body.contract_start_date, "Contract start date", errors, "contract_start_date");
+  const endDate = requiredDate(body.contract_end_date, "Contract end date", errors, "contract_end_date");
+  const amount = requiredNumber(body.amount, "Amount", errors, "amount", { min: 0 });
+
+  if (startDate && endDate && endDate < startDate) {
+    errors.contract_end_date = "Contract end date must be on or after the start date.";
+  }
+
+  return {
+    errors: errors,
+    values: Object.keys(errors).length ? null : {
+      broker_id: brokerId,
+      owner_id: ownerId,
+      tenant_id: tenantId,
+      contract_start_date: startDate,
+      contract_end_date: endDate,
+      amount: amount
+    }
+  };
+}
+
+function contractPayload(contract) {
+  if (!contract) return null;
+  return {
+    broker_id: contract.broker_id,
+    owner_id: contract.owner_id,
+    tenant_id: contract.tenant_id,
+    contract_start_date: contract.contract_start_date,
+    contract_end_date: contract.contract_end_date,
+    amount: contract.amount
+  };
+}
+
+async function withContract(property, ownerCompanyId) {
+  const contract = await PropertyContracts.findOne({
+    where: {
+      property_id: property.id,
+      company_id: ownerCompanyId
+    }
+  });
+  const data = property.toJSON();
+  data.contract = contractPayload(contract);
+  return data;
+}
+
+async function partyErrors(contract, ownerCompanyId) {
+  if (!contract) return {};
+
+  const errors = {};
+  const broker = await Brokers.findOne({
+    where: {
+      id: contract.broker_id,
+      company_id: ownerCompanyId
+    }
+  });
+  const owner = await Owners.findOne({
+    where: {
+      id: contract.owner_id,
+      company_id: ownerCompanyId
+    }
+  });
+  const tenant = await Tenants.findOne({
+    where: {
+      id: contract.tenant_id,
+      company_id: ownerCompanyId
+    }
+  });
+
+  if (!broker) errors.broker_id = "Select a broker from your company.";
+  if (!owner) errors.owner_id = "Select an owner from your company.";
+  if (!tenant) errors.tenant_id = "Select a tenant from your company.";
+  return errors;
+}
+
+async function saveContract(propertyId, ownerCompanyId, contract, transaction) {
+  const existing = await PropertyContracts.findOne({
+    where: {
+      property_id: propertyId,
+      company_id: ownerCompanyId
+    },
+    transaction: transaction
+  });
+
+  if (!contract) {
+    if (existing) await existing.destroy({ transaction: transaction });
+    return null;
+  }
+
+  const values = {
+    broker_id: contract.broker_id,
+    owner_id: contract.owner_id,
+    tenant_id: contract.tenant_id,
+    contract_start_date: contract.contract_start_date,
+    contract_end_date: contract.contract_end_date,
+    amount: contract.amount
+  };
+
+  if (existing) {
+    await existing.update(values, { transaction: transaction });
+    return existing;
+  }
+
+  return PropertyContracts.create(Object.assign({
+    property_id: propertyId,
+    company_id: ownerCompanyId
+  }, values), { transaction: transaction });
+}
+
+async function writeProperty(req, res, property) {
+  const parsed = parseProperty(req.body || {});
+  const contract = parseContract(req.body || {}, parsed.values.status);
+  Object.assign(parsed.errors, contract.errors);
+  if (Object.keys(parsed.errors).length) {
+    return res.status(422).json({ error: "Validation failed.", fields: parsed.errors });
+  }
+
+  const parties = await partyErrors(contract.values, companyId(req));
+  if (Object.keys(parties).length) {
+    return res.status(422).json({ error: "Validation failed.", fields: parties });
+  }
+
+  const saved = await db.transaction(async function(transaction) {
+    let record = property;
+    if (record) {
+      await record.update(parsed.values, { transaction: transaction });
+    } else {
+      record = await Properties.create(Object.assign({}, parsed.values, {
+        company_id: companyId(req)
+      }), { transaction: transaction });
+    }
+    await saveContract(record.id, companyId(req), contract.values, transaction);
+    return record;
+  });
+
+  return res.status(property ? 200 : 201).json(await withContract(saved, companyId(req)));
 }
 
 module.exports = function(app) {
@@ -249,7 +436,7 @@ module.exports = function(app) {
       if (!property) {
         return res.status(404).json({ error: "Property not found." });
       }
-      return res.status(200).json(property);
+      return res.status(200).json(await withContract(property, companyId(req)));
     } catch (error) {
       console.error("Get property failed:", error);
       return res.status(500).json({ error: "Unable to retrieve property." });
@@ -258,16 +445,7 @@ module.exports = function(app) {
 
   app.post("/api/properties", requireCompanyAuth, async function(req, res) {
     try {
-      const parsed = parseProperty(req.body || {});
-      if (Object.keys(parsed.errors).length) {
-        return res.status(422).json({ error: "Validation failed.", fields: parsed.errors });
-      }
-
-      const property = await Properties.create(Object.assign({}, parsed.values, {
-        company_id: companyId(req)
-      }));
-
-      return res.status(201).json(property);
+      return await writeProperty(req, res, null);
     } catch (error) {
       console.error("Create property failed:", error);
       return res.status(400).json({ error: "Unable to create property." });
@@ -281,13 +459,7 @@ module.exports = function(app) {
         return res.status(404).json({ error: "Property not found." });
       }
 
-      const parsed = parseProperty(req.body || {});
-      if (Object.keys(parsed.errors).length) {
-        return res.status(422).json({ error: "Validation failed.", fields: parsed.errors });
-      }
-
-      await property.update(parsed.values);
-      return res.status(200).json(property);
+      return await writeProperty(req, res, property);
     } catch (error) {
       console.error("Update property failed:", error);
       return res.status(400).json({ error: "Unable to update property." });

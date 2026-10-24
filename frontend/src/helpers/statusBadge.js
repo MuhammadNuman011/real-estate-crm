@@ -12,6 +12,11 @@ export function statusBadge(value) {
       className: 'badge bg-danger-subtle text-danger py-2 px-4'
     }, 'INACTIVE');
   }
+  if (status === 'rented') {
+    return h('span', {
+      className: 'badge bg-warning-subtle text-warning py-2 px-4'
+    }, 'RENTED');
+  }
   if (!status) return '';
   return h('span', {
     className: 'badge bg-secondary-subtle text-secondary py-2 px-4'

@@ -24,7 +24,7 @@ const schema = yup.object({
   area_unit: yup.string().oneOf(['sqft', 'sqm']).required(),
   available_from: yup.string().default(''),
   allowed_nationalities: yup.string().trim().required('Allowed nationalities is required'),
-  status: yup.string().oneOf(['inactive', 'active']).required(),
+  status: yup.string().oneOf(['inactive', 'active', 'rented']).required(),
   lat: yup.string().trim().required('Pick a location on the map').test('lat', 'Enter a valid latitude', value => {
     const number = Number(value);
     return Number.isFinite(number) && number >= -90 && number <= 90;
@@ -33,8 +33,45 @@ const schema = yup.object({
     const number = Number(value);
     return Number.isFinite(number) && number >= -180 && number <= 180;
   }),
-  description: yup.string().trim().required('Description is required')
+  description: yup.string().trim().required('Description is required'),
+  broker_id: yup.string().default('').test('broker-required', 'Broker who rented the property is required.', function (value) {
+    return !contractRequired(this.parent) || String(value ?? '').trim() !== '';
+  }),
+  owner_id: yup.string().default('').test('owner-required', 'Owner is required.', function (value) {
+    return !contractRequired(this.parent) || String(value ?? '').trim() !== '';
+  }),
+  tenant_id: yup.string().default('').test('tenant-required', 'Tenant who took the property is required.', function (value) {
+    return !contractRequired(this.parent) || String(value ?? '').trim() !== '';
+  }),
+  contract_start_date: yup.string().default('').test('start-required', 'Contract start date is required.', function (value) {
+    return !contractRequired(this.parent) || /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''));
+  }),
+  contract_end_date: yup.string().default('').test('end-required', 'Contract end date is required.', function (value) {
+    if (!contractRequired(this.parent)) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''))) {
+      return this.createError({ message: 'Contract end date is required.' });
+    }
+    const start = this.parent.contract_start_date;
+    if (start && value < start) {
+      return this.createError({ message: 'Contract end date must be on or after the start date.' });
+    }
+    return true;
+  }),
+  amount: yup.string().default('').test('amount-required', 'Amount is required.', function (value) {
+    if (!contractRequired(this.parent)) return true;
+    if (String(value ?? '').trim() === '') return false;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) {
+      return this.createError({ message: 'Amount must be at least 0.' });
+    }
+    return true;
+  })
 });
+
+function contractRequired(values) {
+  if (values.status === 'rented') return true;
+  return ['broker_id', 'owner_id', 'tenant_id', 'contract_start_date', 'contract_end_date', 'amount'].some(key => String(values[key] ?? '').trim() !== '');
+}
 
 const defaultValues = {
   rent_sale: '',
@@ -51,7 +88,13 @@ const defaultValues = {
   status: 'inactive',
   lat: '',
   long: '',
-  description: ''
+  description: '',
+  broker_id: '',
+  owner_id: '',
+  tenant_id: '',
+  contract_start_date: '',
+  contract_end_date: '',
+  amount: ''
 };
 
 function dateInputValue(value) {
@@ -82,7 +125,13 @@ function toFormValues(property) {
     status: property.status || 'inactive',
     lat: property.lat == null ? '' : String(property.lat),
     long: property.long == null ? '' : String(property.long),
-    description: property.description ?? ''
+    description: property.description ?? '',
+    broker_id: property.contract?.broker_id == null ? '' : String(property.contract.broker_id),
+    owner_id: property.contract?.owner_id == null ? '' : String(property.contract.owner_id),
+    tenant_id: property.contract?.tenant_id == null ? '' : String(property.contract.tenant_id),
+    contract_start_date: dateInputValue(property.contract?.contract_start_date),
+    contract_end_date: dateInputValue(property.contract?.contract_end_date),
+    amount: property.contract?.amount ?? ''
   };
 }
 
@@ -102,8 +151,24 @@ function propertyPayload(values) {
     status: values.status,
     lat: values.lat.trim(),
     long: values.long.trim(),
-    description: values.description.trim()
+    description: values.description.trim(),
+    broker_id: values.broker_id || null,
+    owner_id: values.owner_id || null,
+    tenant_id: values.tenant_id || null,
+    contract_start_date: values.contract_start_date || null,
+    contract_end_date: values.contract_end_date || null,
+    amount: values.amount === '' ? null : values.amount
   };
+}
+
+function personLabel(person) {
+  const name = person.name || 'Saved record';
+  return person.mobile ? name + ' · ' + person.mobile : name;
+}
+
+function withCurrentPerson(people, currentId) {
+  if (!currentId || people.some(person => String(person.id) === String(currentId))) return people;
+  return [{ id: currentId, name: 'Saved record' }, ...people];
 }
 
 const PropertyForm = ({ mode }) => {
@@ -114,6 +179,10 @@ const PropertyForm = ({ mode }) => {
   const [loadingProperty, setLoadingProperty] = useState(isEdit);
   const [propertyTypes, setPropertyTypes] = useState([]);
   const [propertyTypesLoading, setPropertyTypesLoading] = useState(true);
+  const [brokers, setBrokers] = useState([]);
+  const [owners, setOwners] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [peopleLoading, setPeopleLoading] = useState(true);
   const [error, setError] = useState('');
   const { showNotification } = useNotificationContext();
   const {
@@ -132,7 +201,13 @@ const PropertyForm = ({ mode }) => {
   const lat = watch('lat');
   const lng = watch('long');
   const selectedType = watch('property_type');
+  const selectedBrokerId = watch('broker_id');
+  const selectedOwnerId = watch('owner_id');
+  const selectedTenantId = watch('tenant_id');
   const isStudio = selectedType?.trim().toLowerCase() === 'studio';
+  const brokerOptions = withCurrentPerson(brokers, selectedBrokerId);
+  const ownerOptions = withCurrentPerson(owners, selectedOwnerId);
+  const tenantOptions = withCurrentPerson(tenants, selectedTenantId);
   const typeOptions = selectedType && !propertyTypes.includes(selectedType) ? [selectedType, ...propertyTypes] : propertyTypes;
   const canChooseType = isEdit ? typeOptions.length > 0 : propertyTypes.length > 0;
 
@@ -159,6 +234,32 @@ const PropertyForm = ({ mode }) => {
       active = false;
     };
   }, [getValues, isEdit, setValue]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [brokerResponse, ownerResponse, tenantResponse] = await Promise.all([
+          httpClient.get('/api/brokers'),
+          httpClient.get('/api/owners'),
+          httpClient.get('/api/tenants')
+        ]);
+        if (!active) return;
+        setBrokers(Array.isArray(brokerResponse.data) ? brokerResponse.data : []);
+        setOwners(Array.isArray(ownerResponse.data) ? ownerResponse.data : []);
+        setTenants(Array.isArray(tenantResponse.data) ? tenantResponse.data : []);
+      } catch (e) {
+        if (active) {
+          setError(e.response?.data?.error || 'Unable to load brokers, owners, and tenants.');
+        }
+      } finally {
+        if (active) setPeopleLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!isEdit) return undefined;
@@ -300,6 +401,7 @@ const PropertyForm = ({ mode }) => {
                   <Form.Select {...register('status')} isInvalid={Boolean(errors.status)}>
                     <option value="inactive">Inactive</option>
                     <option value="active">Active</option>
+                    <option value="rented">Rented</option>
                   </Form.Select>
                   <Form.Control.Feedback type="invalid">{errors.status?.message}</Form.Control.Feedback>
                 </Form.Group>
@@ -363,8 +465,70 @@ const PropertyForm = ({ mode }) => {
                   <Form.Control.Feedback type="invalid">{errors.description?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
+              <Col xs={12}>
+                <hr className="my-1" />
+                <h6 className="mb-1">Rental contract</h6>
+                <div className="text-muted small">Broker who rented the property, owner, tenant who took the property, contract dates, and amount are saved on the rental contract. Required when status is rented.</div>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Broker who rented the property</Form.Label>
+                  <Form.Select {...register('broker_id')} disabled={peopleLoading} isInvalid={Boolean(errors.broker_id)}>
+                    <option value="">{peopleLoading ? 'Loading brokers...' : 'Select broker'}</option>
+                    {brokerOptions.map(broker => <option key={broker.id} value={broker.id}>
+                        {personLabel(broker)}
+                      </option>)}
+                  </Form.Select>
+                  <Form.Control.Feedback type="invalid">{errors.broker_id?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Owner</Form.Label>
+                  <Form.Select {...register('owner_id')} disabled={peopleLoading} isInvalid={Boolean(errors.owner_id)}>
+                    <option value="">{peopleLoading ? 'Loading owners...' : 'Select owner'}</option>
+                    {ownerOptions.map(owner => <option key={owner.id} value={owner.id}>
+                        {personLabel(owner)}
+                      </option>)}
+                  </Form.Select>
+                  <Form.Control.Feedback type="invalid">{errors.owner_id?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Tenant who took the property</Form.Label>
+                  <Form.Select {...register('tenant_id')} disabled={peopleLoading} isInvalid={Boolean(errors.tenant_id)}>
+                    <option value="">{peopleLoading ? 'Loading tenants...' : 'Select tenant'}</option>
+                    {tenantOptions.map(tenant => <option key={tenant.id} value={tenant.id}>
+                        {personLabel(tenant)}
+                      </option>)}
+                  </Form.Select>
+                  <Form.Control.Feedback type="invalid">{errors.tenant_id?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Contract start date</Form.Label>
+                  <Form.Control type="date" {...register('contract_start_date')} isInvalid={Boolean(errors.contract_start_date)} />
+                  <Form.Control.Feedback type="invalid">{errors.contract_start_date?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Contract end date</Form.Label>
+                  <Form.Control type="date" {...register('contract_end_date')} isInvalid={Boolean(errors.contract_end_date)} />
+                  <Form.Control.Feedback type="invalid">{errors.contract_end_date?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Amount</Form.Label>
+                  <Form.Control type="number" min="0" step="0.01" {...register('amount')} isInvalid={Boolean(errors.amount)} />
+                  <Form.Control.Feedback type="invalid">{errors.amount?.message}</Form.Control.Feedback>
+                </Form.Group>
+              </Col>
               <Col xs={12} className="d-flex gap-2">
-                <Button type="submit" disabled={loading || loadingProperty || propertyTypesLoading || !canChooseType}>
+                <Button type="submit" disabled={loading || loadingProperty || propertyTypesLoading || peopleLoading || !canChooseType}>
                   {loading ? <Spinner animation="border" size="sm" className="me-2" /> : null}
                   {isEdit ? 'Update property' : 'Add property'}
                 </Button>

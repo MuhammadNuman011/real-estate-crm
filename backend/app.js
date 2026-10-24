@@ -49,7 +49,38 @@ if (fs.existsSync(frontendIndex)) {
   });
 }
 
-db.sync();
+const Properties = require("./modals/Properties");
+
+function ensureContractTenantColumn() {
+  return db.query("SHOW COLUMNS FROM `property_contracts` LIKE 'tenant_id'").then(function(result) {
+    const column = result[0][0];
+    return db.query("SELECT COUNT(*) AS total FROM `property_contracts`").then(function(countResult) {
+      const total = Number(countResult[0][0].total);
+      if (!column) {
+        const definition = total === 0 ? "INTEGER NOT NULL" : "INTEGER NULL";
+        return db.query("ALTER TABLE `property_contracts` ADD COLUMN `tenant_id` " + definition + " AFTER `owner_id`");
+      }
+      if (column.Null === "YES" && total === 0) {
+        return db.query("ALTER TABLE `property_contracts` MODIFY `tenant_id` INTEGER NOT NULL");
+      }
+      return null;
+    });
+  });
+}
+
+db.sync().then(function() {
+  const table = Properties.getTableName();
+  const tableName = typeof table === "string" ? table : table.tableName;
+  return db.query(
+    "ALTER TABLE `" + tableName + "` MODIFY `status` ENUM('inactive', 'active', 'rented') NOT NULL DEFAULT 'inactive'"
+  ).catch(function(err) {
+    console.log("Unable to update property status values.");
+    console.log(err);
+  }).then(ensureContractTenantColumn);
+}).catch(function(err) {
+  console.log("Unable to prepare property tables.");
+  console.log(err);
+});
 
 app.listen(port, "0.0.0.0", function() {
   console.log("Server running on port " + port);

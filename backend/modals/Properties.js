@@ -68,7 +68,7 @@ module.exports = db.define(
     },
 
     status: {
-      type: Sequelize.ENUM("inactive", "active"),
+      type: Sequelize.ENUM("inactive", "active", "rented"),
       allowNull: false,
       defaultValue: "inactive",
     },

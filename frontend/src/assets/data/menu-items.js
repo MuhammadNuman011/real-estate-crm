@@ -47,6 +47,12 @@ export const MENU_ITEMS = [{
   icon: 'iconamoon:profile-circle-duotone',
   label: 'Owners',
   url: '/owners'
+},
+{
+  key: 'tenants',
+  icon: 'iconamoon:profile-circle-duotone',
+  label: 'Tenants',
+  url: '/tenants'
 }, 
 // {
 //   key: 'apps',
