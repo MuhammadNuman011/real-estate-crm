@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120" role="img" aria-label="No property image">
+  <rect width="160" height="120" fill="#e9ecef"/>
+  <path d="M28 86V48l52-28 52 28v38H28z" fill="#ced4da"/>
+  <path d="M68 86V62h24v24" fill="#adb5bd"/>
+  <circle cx="104" cy="42" r="8" fill="#dee2e6"/>
+</svg>

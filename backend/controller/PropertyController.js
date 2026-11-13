@@ -1,3 +1,6 @@
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const Properties = require("../modals/Properties");
 const PropertyContracts = require("../modals/PropertyContract");
 const Brokers = require("../modals/Broker");
@@ -7,6 +10,15 @@ const db = require("../config/db");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 const requireBrokerAuth = require("../middleware/requireBrokerAuth");
 const { Op } = require("sequelize");
+
+const UPLOAD_DIR = path.join(__dirname, "../uploads/properties");
+const STORED_PREFIX = "/uploads/properties/";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp"
+};
 
 function trimmed(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -49,7 +61,8 @@ const LIST_ATTRIBUTES = [
   "available_from",
   "status",
   "lat",
-  "long"
+  "long",
+  "image"
 ];
 
 function companyId(req) {
@@ -80,6 +93,54 @@ function propertyListWhere(req, baseWhere) {
   }
 
   return { where: where };
+}
+
+function savePropertyImage(dataUrl) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
+  if (!match || !IMAGE_TYPES[match[1]]) {
+    return { error: "Property image must be a JPG, JPEG, PNG, or WebP image." };
+  }
+
+  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
+    return { error: "Property image must be under 5 MB." };
+  }
+
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  const filename = crypto.randomBytes(16).toString("hex") + IMAGE_TYPES[match[1]];
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+  return { path: STORED_PREFIX + filename };
+}
+
+function removePropertyImage(storedPath) {
+  if (typeof storedPath !== "string" || !storedPath.startsWith(STORED_PREFIX)) return;
+  const filename = path.basename(storedPath);
+  const fullPath = path.resolve(UPLOAD_DIR, filename);
+  if (!fullPath.startsWith(path.resolve(UPLOAD_DIR) + path.sep)) return;
+  if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+}
+
+function resolvePropertyImage(value, currentPath) {
+  if (value === undefined) {
+    return { path: currentPath || null };
+  }
+  if (value == null || value === "") {
+    return { path: null, previous: currentPath || null };
+  }
+  if (typeof value !== "string") {
+    return { error: "Property image must be an image." };
+  }
+
+  const text = value.trim();
+  if (text.startsWith("data:")) {
+    const saved = savePropertyImage(text);
+    if (saved.error) return saved;
+    return { path: saved.path, previous: currentPath || null, created: saved.path };
+  }
+  if (currentPath && text === currentPath) {
+    return { path: currentPath };
+  }
+  return { error: "Property image must be an image." };
 }
 
 function ownedByCompany(id, ownerCompanyId) {
@@ -346,18 +407,40 @@ async function writeProperty(req, res, property) {
     return res.status(422).json({ error: "Validation failed.", fields: parties });
   }
 
-  const saved = await db.transaction(async function(transaction) {
-    let record = property;
-    if (record) {
-      await record.update(parsed.values, { transaction: transaction });
-    } else {
-      record = await Properties.create(Object.assign({}, parsed.values, {
-        company_id: companyId(req)
-      }), { transaction: transaction });
-    }
-    await saveContract(record.id, companyId(req), contract.values, transaction);
-    return record;
-  });
+  const image = resolvePropertyImage(
+    (req.body || {}).image,
+    property ? property.image : null
+  );
+  if (image.error) {
+    return res.status(422).json({
+      error: "Validation failed.",
+      fields: { image: image.error }
+    });
+  }
+
+  let saved;
+  try {
+    saved = await db.transaction(async function(transaction) {
+      let record = property;
+      const values = Object.assign({}, parsed.values, { image: image.path });
+      if (record) {
+        await record.update(values, { transaction: transaction });
+      } else {
+        record = await Properties.create(Object.assign({}, values, {
+          company_id: companyId(req)
+        }), { transaction: transaction });
+      }
+      await saveContract(record.id, companyId(req), contract.values, transaction);
+      return record;
+    });
+  } catch (error) {
+    removePropertyImage(image.created);
+    throw error;
+  }
+
+  if (image.previous && image.previous !== image.path) {
+    removePropertyImage(image.previous);
+  }
 
   return res.status(property ? 200 : 201).json(await withContract(saved, companyId(req)));
 }

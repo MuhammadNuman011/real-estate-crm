@@ -171,6 +171,9 @@ function withCurrentPerson(people, currentId) {
   return [{ id: currentId, name: 'Saved record' }, ...people];
 }
 
+const PROPERTY_PLACEHOLDER = '/property-placeholder.svg';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 const PropertyForm = ({ mode }) => {
   const isEdit = mode === 'edit';
   const { id } = useParams();
@@ -184,6 +187,10 @@ const PropertyForm = ({ mode }) => {
   const [tenants, setTenants] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(true);
   const [error, setError] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [keepImage, setKeepImage] = useState('');
+  const [imageError, setImageError] = useState('');
   const { showNotification } = useNotificationContext();
   const {
     register,
@@ -268,7 +275,11 @@ const PropertyForm = ({ mode }) => {
       try {
         const response = await httpClient.get('/api/properties/' + id);
         if (!active) return;
-        reset(toFormValues(response.data || {}));
+        const property = response.data || {};
+        reset(toFormValues(property));
+        setKeepImage(property.image || '');
+        setImagePreview(property.image || '');
+        setImageFile(null);
       } catch (e) {
         if (!active) return;
         setError(e.response?.data?.error || 'Unable to load property.');
@@ -286,11 +297,45 @@ const PropertyForm = ({ mode }) => {
     setValue('long', nextLng, { shouldValidate: true, shouldDirty: true });
   }, [setValue]);
 
+  const onImageChange = event => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setImageError('Use a JPG, JPEG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError('Property image must be under 5 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      setImageFile(result);
+      setImagePreview(result);
+      setImageError('');
+    };
+    reader.onerror = () => setImageError('Unable to read the image.');
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview('');
+    setKeepImage('');
+    setImageError('');
+  };
+
   const onSubmit = handleSubmit(async values => {
     setLoading(true);
     setError('');
+    setImageError('');
     try {
       const payload = propertyPayload(values);
+      if (imageFile) payload.image = imageFile;
+      else if (keepImage) payload.image = keepImage;
+      else payload.image = null;
       if (isEdit) {
         await httpClient.patch('/api/properties/' + id, payload);
       } else {
@@ -306,6 +351,10 @@ const PropertyForm = ({ mode }) => {
       const fields = data?.fields;
       if (fields && typeof fields === 'object') {
         Object.entries(fields).forEach(([name, message]) => {
+          if (name === 'image') {
+            setImageError(message);
+            return;
+          }
           setFieldError(name, { message });
         });
       }
@@ -330,6 +379,20 @@ const PropertyForm = ({ mode }) => {
               <Spinner animation="border" role="status" />
             </div> : <Form onSubmit={onSubmit} noValidate>
             <Row className="g-3">
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Property image</Form.Label>
+                  <div className="mb-2">
+                    <img src={imagePreview || PROPERTY_PLACEHOLDER} alt="Property" width="160" height="120" style={{ objectFit: 'cover', borderRadius: '4px', background: '#e9ecef' }} />
+                  </div>
+                  <Form.Control type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={onImageChange} isInvalid={Boolean(imageError)} />
+                  {imageError ? <div className="invalid-feedback d-block">{imageError}</div> : null}
+                  <div className="text-muted small mt-1">One primary photo. JPG, JPEG, PNG, or WebP, up to 5 MB.</div>
+                  {imagePreview ? <Button type="button" variant="outline-danger" size="sm" className="mt-2" onClick={clearImage}>
+                      Remove image
+                    </Button> : null}
+                </Form.Group>
+              </Col>
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Listing type</Form.Label>

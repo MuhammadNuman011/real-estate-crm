@@ -88,6 +88,11 @@ module.exports = db.define(
       allowNull: true,
     },
 
+    image: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
     company_id: {
       type: Sequelize.STRING,
       allowNull: false,

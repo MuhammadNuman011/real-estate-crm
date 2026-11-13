@@ -9,7 +9,24 @@ import { useAuthContext } from '@/context/useAuthContext';
 import httpClient from '@/helpers/httpClient';
 import { statusBadge } from '@/helpers/statusBadge';
 
+const PROPERTY_PLACEHOLDER = '/property-placeholder.svg';
+
 const listColumns = [{
+  id: 'image',
+  name: 'Photo',
+  sort: false,
+  formatter: cell => h('img', {
+    src: cell || PROPERTY_PLACEHOLDER,
+    alt: '',
+    width: 56,
+    height: 42,
+    style: {
+      objectFit: 'cover',
+      borderRadius: '4px',
+      background: '#e9ecef'
+    }
+  })
+}, {
   id: 'property_type',
   name: 'Property type'
 }, {
@@ -50,6 +67,7 @@ function formatPrice(value) {
 function toRow(property) {
   return {
     id: property.id ?? '',
+    image: property.image ?? '',
     property_type: property.property_type ?? '',
     price: formatPrice(property.price),
     bedrooms: property.bedrooms ?? '',
