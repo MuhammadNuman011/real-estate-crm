@@ -27,6 +27,9 @@ const listColumns = [{
     }
   })
 }, {
+  id: 'title',
+  name: 'Title'
+}, {
   id: 'property_type',
   name: 'Property type'
 }, {
@@ -96,6 +99,7 @@ function toRow(property) {
   return {
     id: property.id ?? '',
     image: property.image ?? '',
+    title: property.title ?? '',
     property_type: property.property_type ?? '',
     price: formatPrice(property.price),
     bedrooms: property.bedrooms ?? '',

@@ -59,6 +59,7 @@ function requiredNumber(value, label, errors, field, options) {
 
 const LIST_ATTRIBUTES = [
   "id",
+  "title",
   "property_type",
   "price",
   "bedrooms",
@@ -292,6 +293,19 @@ function parseProperty(body) {
     errors.long = "Longitude is required.";
   }
 
+  let title = null;
+  if (body.title != null && body.title !== "" && typeof body.title !== "string") {
+    errors.title = "Property title must be text.";
+  } else {
+    title = trimmed(body.title);
+    if (title.length > 255) {
+      errors.title = "Property title must be 255 characters or fewer.";
+      title = null;
+    } else if (!title) {
+      title = null;
+    }
+  }
+
   const description = trimmed(body.description);
   if (!description) {
     errors.description = "Description is required.";
@@ -339,6 +353,7 @@ function parseProperty(body) {
       status: status,
       lat: lat,
       long: longitude,
+      title: title,
       description: description
     }
   };
@@ -580,6 +595,7 @@ async function writeProperty(req, res, property) {
   }
 
   const descriptionChanged = !property || trimmed(property.description) !== parsed.values.description;
+  const titleChanged = !property || trimmed(property.title) !== (parsed.values.title || "");
   const picturesChanged = !samePaths(currentPaths, images.paths);
   const brochureMissing = !property || !property.pdf_path;
 
@@ -609,7 +625,7 @@ async function writeProperty(req, res, property) {
   cleanupImages(images.removed);
 
   let pdfWarning = null;
-  if (!property || descriptionChanged || picturesChanged || brochureMissing) {
+  if (!property || descriptionChanged || titleChanged || picturesChanged || brochureMissing) {
     const name = await companyNameFor(ownerCompanyId, req.company && req.company.name);
     pdfWarning = await refreshBrochure(saved, ownerCompanyId, name, images.paths);
   }

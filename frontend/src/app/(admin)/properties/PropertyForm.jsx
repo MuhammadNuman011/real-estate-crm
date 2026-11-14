@@ -11,6 +11,7 @@ import httpClient from '@/helpers/httpClient';
 import LocationMap from './LocationMap';
 
 const schema = yup.object({
+  title: yup.string().trim().max(255, 'Property title must be 255 characters or fewer').default(''),
   rent_sale: yup.string().oneOf(['rent', 'sale'], 'Listing type is required').required('Listing type is required'),
   price: yup.number().typeError('Price is required').min(0, 'Price must be at least 0').required('Price is required'),
   property_type: yup.string().trim().default('Villa'),
@@ -74,6 +75,7 @@ function contractRequired(values) {
 }
 
 const defaultValues = {
+  title: '',
   rent_sale: '',
   price: '',
   property_type: 'Villa',
@@ -111,6 +113,7 @@ function maidRoomValue(value) {
 
 function toFormValues(property) {
   return {
+    title: property.title ?? '',
     rent_sale: property.rent_sale ?? '',
     price: property.price ?? '',
     property_type: property.property_type || 'Villa',
@@ -137,6 +140,7 @@ function toFormValues(property) {
 
 function propertyPayload(values) {
   return {
+    title: values.title.trim() || null,
     rent_sale: values.rent_sale,
     price: values.price,
     property_type: values.property_type?.trim() || 'Villa',
@@ -450,6 +454,13 @@ const PropertyForm = ({ mode }) => {
                   <Form.Control type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={onImagesChange} isInvalid={Boolean(imageError)} />
                   {imageError ? <div className="invalid-feedback d-block">{imageError}</div> : null}
                   <div className="text-muted small mt-1">JPG, JPEG, PNG, or WebP. Up to 5 MB each and {MAX_IMAGES} pictures. Use Left and Right to set the brochure order. The first picture is the cover.</div>
+                </Form.Group>
+              </Col>
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Property title</Form.Label>
+                  <Form.Control type="text" maxLength={255} placeholder="Optional" {...register('title')} isInvalid={Boolean(errors.title)} />
+                  <Form.Control.Feedback type="invalid">{errors.title?.message}</Form.Control.Feedback>
                 </Form.Group>
               </Col>
               <Col md={6}>

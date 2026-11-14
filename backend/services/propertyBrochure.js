@@ -133,6 +133,7 @@ function buildPropertyBrochure(options) {
   const companyName = options.companyName;
   const property = options.property || {};
   const images = options.images || [];
+  const title = String(property.title || "").trim();
   const description = String(property.description || "").trim() || "No description provided.";
 
   return new Promise(function(resolve, reject) {
@@ -141,7 +142,7 @@ function buildPropertyBrochure(options) {
       margins: { top: 72, bottom: 50, left: 40, right: 40 },
       bufferPages: true,
       info: {
-        Title: (property.property_type || "Property") + " brochure",
+        Title: (title || property.property_type || "Property") + " brochure",
         Author: String(companyName || "Company").trim() || "Company"
       }
     });
@@ -212,6 +213,12 @@ function buildPropertyBrochure(options) {
     if (y + 78 > contentBottom) {
       doc.addPage();
       y = doc.page.margins.top;
+    }
+
+    if (title) {
+      doc.font("Helvetica-Bold").fontSize(16).fillColor("#1f2933");
+      doc.text(title, left, y, { width: contentWidth });
+      y = doc.y + 10;
     }
 
     const summary = propertySummary(property);

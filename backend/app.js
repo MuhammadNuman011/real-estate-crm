@@ -52,6 +52,15 @@ if (fs.existsSync(frontendIndex)) {
 const Properties = require("./modals/Properties");
 require("./modals/PropertyImage");
 
+function ensurePropertyTitleColumn() {
+  const table = Properties.getTableName();
+  const tableName = typeof table === "string" ? table : table.tableName;
+  return db.query("SHOW COLUMNS FROM `" + tableName + "` LIKE 'title'").then(function(result) {
+    if (result[0].length) return null;
+    return db.query("ALTER TABLE `" + tableName + "` ADD COLUMN `title` VARCHAR(255) NULL");
+  });
+}
+
 function ensurePropertyImageColumn() {
   const table = Properties.getTableName();
   const tableName = typeof table === "string" ? table : table.tableName;
@@ -99,7 +108,7 @@ db.sync().then(function() {
   ).catch(function(err) {
     console.log("Unable to update property status values.");
     console.log(err);
-  }).then(ensureContractTenantColumn).then(ensurePropertyImageColumn).then(ensurePropertyBrochureColumns);
+  }).then(ensureContractTenantColumn).then(ensurePropertyTitleColumn).then(ensurePropertyImageColumn).then(ensurePropertyBrochureColumns);
 }).catch(function(err) {
   console.log("Unable to prepare property tables.");
   console.log(err);

@@ -83,6 +83,11 @@ module.exports = db.define(
       allowNull: true,
     },
 
+    title: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
     description: {
       type: Sequelize.TEXT,
       allowNull: true,
