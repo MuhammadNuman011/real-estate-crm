@@ -171,8 +171,9 @@ function withCurrentPerson(people, currentId) {
   return [{ id: currentId, name: 'Saved record' }, ...people];
 }
 
-const PROPERTY_PLACEHOLDER = '/property-placeholder.svg';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGES = 12;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const PropertyForm = ({ mode }) => {
   const isEdit = mode === 'edit';
@@ -187,9 +188,7 @@ const PropertyForm = ({ mode }) => {
   const [tenants, setTenants] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(true);
   const [error, setError] = useState('');
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState('');
-  const [keepImage, setKeepImage] = useState('');
+  const [pictures, setPictures] = useState([]);
   const [imageError, setImageError] = useState('');
   const { showNotification } = useNotificationContext();
   const {
@@ -277,9 +276,15 @@ const PropertyForm = ({ mode }) => {
         if (!active) return;
         const property = response.data || {};
         reset(toFormValues(property));
-        setKeepImage(property.image || '');
-        setImagePreview(property.image || '');
-        setImageFile(null);
+        const storedImages = Array.isArray(property.images) && property.images.length
+          ? property.images
+          : (property.image ? [property.image] : []);
+        setPictures(storedImages.map(storedPath => ({
+          key: crypto.randomUUID(),
+          preview: storedPath,
+          storedPath,
+          dataUrl: null
+        })));
       } catch (e) {
         if (!active) return;
         setError(e.response?.data?.error || 'Unable to load property.');
@@ -297,34 +302,73 @@ const PropertyForm = ({ mode }) => {
     setValue('long', nextLng, { shouldValidate: true, shouldDirty: true });
   }, [setValue]);
 
-  const onImageChange = event => {
-    const file = event.target.files && event.target.files[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setImageError('Use a JPG, JPEG, PNG, or WebP image.');
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setImageError('Property image must be under 5 MB.');
-      return;
-    }
+  const readPicture = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      setImageFile(result);
-      setImagePreview(result);
-      setImageError('');
-    };
-    reader.onerror = () => setImageError('Unable to read the image.');
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(new Error('Unable to read the image.'));
     reader.readAsDataURL(file);
+  });
+
+  const onImagesChange = async event => {
+    const selected = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!selected.length) return;
+
+    const remaining = MAX_IMAGES - pictures.length;
+    if (remaining <= 0) {
+      setImageError('Upload at most ' + MAX_IMAGES + ' pictures.');
+      return;
+    }
+
+    const accepted = [];
+    let message = '';
+    selected.slice(0, remaining).forEach(file => {
+      if (!IMAGE_TYPES.includes(file.type)) {
+        message = 'Use JPG, JPEG, PNG, or WebP images.';
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        message = 'Each picture must be under 5 MB.';
+        return;
+      }
+      accepted.push(file);
+    });
+    if (selected.length > remaining) {
+      message = 'Upload at most ' + MAX_IMAGES + ' pictures.';
+    }
+
+    try {
+      const loaded = await Promise.all(accepted.map(async file => ({
+        key: crypto.randomUUID(),
+        preview: await readPicture(file),
+        storedPath: null,
+        dataUrl: null
+      })));
+      const next = loaded.map(picture => ({
+        ...picture,
+        dataUrl: picture.preview
+      }));
+      setPictures(current => current.concat(next).slice(0, MAX_IMAGES));
+      setImageError(message);
+    } catch (e) {
+      setImageError('Unable to read one of the images.');
+    }
   };
 
-  const clearImage = () => {
-    setImageFile(null);
-    setImagePreview('');
-    setKeepImage('');
+  const removePicture = key => {
+    setPictures(current => current.filter(picture => picture.key !== key));
     setImageError('');
+  };
+
+  const movePicture = (index, direction) => {
+    setPictures(current => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = current.slice();
+      const [picture] = next.splice(index, 1);
+      next.splice(target, 0, picture);
+      return next;
+    });
   };
 
   const onSubmit = handleSubmit(async values => {
@@ -333,25 +377,29 @@ const PropertyForm = ({ mode }) => {
     setImageError('');
     try {
       const payload = propertyPayload(values);
-      if (imageFile) payload.image = imageFile;
-      else if (keepImage) payload.image = keepImage;
-      else payload.image = null;
-      if (isEdit) {
-        await httpClient.patch('/api/properties/' + id, payload);
+      payload.images = pictures.map(picture => picture.dataUrl || picture.storedPath);
+      const response = isEdit
+        ? await httpClient.patch('/api/properties/' + id, payload)
+        : await httpClient.post('/api/properties', payload);
+      if (response.data?.pdf_warning) {
+        showNotification({
+          message: (isEdit ? 'Property updated. ' : 'Property added. ') + response.data.pdf_warning,
+          variant: 'warning',
+          delay: 5000
+        });
       } else {
-        await httpClient.post('/api/properties', payload);
+        showNotification({
+          message: isEdit ? 'Property updated.' : 'Property added.',
+          variant: 'success'
+        });
       }
-      showNotification({
-        message: isEdit ? 'Property updated.' : 'Property added.',
-        variant: 'success'
-      });
       navigate('/properties');
     } catch (e) {
       const data = e.response?.data;
       const fields = data?.fields;
       if (fields && typeof fields === 'object') {
         Object.entries(fields).forEach(([name, message]) => {
-          if (name === 'image') {
+          if (name === 'image' || name === 'images') {
             setImageError(message);
             return;
           }
@@ -381,16 +429,27 @@ const PropertyForm = ({ mode }) => {
             <Row className="g-3">
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label>Property image</Form.Label>
-                  <div className="mb-2">
-                    <img src={imagePreview || PROPERTY_PLACEHOLDER} alt="Property" width="160" height="120" style={{ objectFit: 'cover', borderRadius: '4px', background: '#e9ecef' }} />
-                  </div>
-                  <Form.Control type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={onImageChange} isInvalid={Boolean(imageError)} />
+                  <Form.Label>Property pictures</Form.Label>
+                  {pictures.length ? <div className="d-flex flex-wrap gap-3 mb-2">
+                      {pictures.map((picture, index) => <div key={picture.key} className="border rounded p-2" style={{ width: 168 }}>
+                          <img src={picture.preview} alt={'Property picture ' + (index + 1)} style={{ width: '100%', height: 108, objectFit: 'contain', background: '#e9ecef', borderRadius: 4 }} />
+                          <div className="d-flex gap-1 mt-2">
+                            <Button type="button" variant="outline-secondary" size="sm" disabled={index === 0} onClick={() => movePicture(index, -1)}>
+                              Left
+                            </Button>
+                            <Button type="button" variant="outline-secondary" size="sm" disabled={index === pictures.length - 1} onClick={() => movePicture(index, 1)}>
+                              Right
+                            </Button>
+                            <Button type="button" variant="outline-danger" size="sm" onClick={() => removePicture(picture.key)}>
+                              Remove
+                            </Button>
+                          </div>
+                          {index === 0 ? <div className="text-muted small mt-1">Cover photo</div> : null}
+                        </div>)}
+                    </div> : <div className="text-muted small mb-2">No pictures yet. The brochure will still include the description.</div>}
+                  <Form.Control type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={onImagesChange} isInvalid={Boolean(imageError)} />
                   {imageError ? <div className="invalid-feedback d-block">{imageError}</div> : null}
-                  <div className="text-muted small mt-1">One primary photo. JPG, JPEG, PNG, or WebP, up to 5 MB.</div>
-                  {imagePreview ? <Button type="button" variant="outline-danger" size="sm" className="mt-2" onClick={clearImage}>
-                      Remove image
-                    </Button> : null}
+                  <div className="text-muted small mt-1">JPG, JPEG, PNG, or WebP. Up to 5 MB each and {MAX_IMAGES} pictures. Use Left and Right to set the brochure order. The first picture is the cover.</div>
                 </Form.Group>
               </Col>
               <Col md={6}>
@@ -593,7 +652,7 @@ const PropertyForm = ({ mode }) => {
               <Col xs={12} className="d-flex gap-2">
                 <Button type="submit" disabled={loading || loadingProperty || propertyTypesLoading || peopleLoading || !canChooseType}>
                   {loading ? <Spinner animation="border" size="sm" className="me-2" /> : null}
-                  {isEdit ? 'Update property' : 'Add property'}
+                  {loading ? 'Saving and generating PDF…' : (isEdit ? 'Update property' : 'Add property')}
                 </Button>
                 <Button type="button" variant="light" onClick={() => navigate('/properties')}>
                   Cancel

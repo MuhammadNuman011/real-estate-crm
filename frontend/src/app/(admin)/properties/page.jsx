@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, CardBody, CardTitle, Col, Form, Row, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { h } from 'gridjs';
@@ -47,15 +47,43 @@ const listColumns = [{
   formatter: cell => statusBadge(cell)
 }];
 
-const actionColumn = {
-  id: 'id',
-  name: 'Actions',
-  sort: false,
-  formatter: cell => h('a', {
-    href: '/properties/' + cell + '/edit',
-    className: 'btn btn-sm btn-outline-primary'
-  }, 'Edit')
-};
+function actionColumn(isBroker, openBrochure) {
+  return {
+    id: 'actions',
+    name: 'Actions',
+    sort: false,
+    formatter: cell => {
+      const propertyId = cell && cell.id;
+      const hasPdf = Boolean(cell && cell.hasPdf);
+      const buttons = [];
+      if (!isBroker) {
+        buttons.push(h('a', {
+          href: '/properties/' + propertyId + '/edit',
+          className: 'btn btn-sm btn-outline-primary'
+        }, 'Edit'));
+      }
+      buttons.push(h('button', {
+        type: 'button',
+        className: 'btn btn-sm btn-outline-secondary',
+        disabled: !hasPdf,
+        title: hasPdf ? 'View PDF' : 'Save the property to generate a brochure.',
+        onClick: () => {
+          if (hasPdf) openBrochure(propertyId, false);
+        }
+      }, 'View PDF'));
+      buttons.push(h('button', {
+        type: 'button',
+        className: 'btn btn-sm btn-outline-secondary',
+        disabled: !hasPdf,
+        title: hasPdf ? 'Download PDF' : 'Save the property to generate a brochure.',
+        onClick: () => {
+          if (hasPdf) openBrochure(propertyId, true);
+        }
+      }, 'Download PDF'));
+      return h('div', { className: 'd-flex flex-wrap gap-1' }, buttons);
+    }
+  };
+}
 
 function formatPrice(value) {
   if (value === null || value === undefined || value === '') return '';
@@ -73,7 +101,11 @@ function toRow(property) {
     bedrooms: property.bedrooms ?? '',
     furnishing: property.furnishing ?? '',
     available_from: property.available_from ?? '',
-    status: property.status ?? ''
+    status: property.status ?? '',
+    actions: {
+      id: property.id ?? '',
+      hasPdf: Boolean(property.pdf_path)
+    }
   };
 }
 
@@ -87,7 +119,51 @@ const PropertiesPage = () => {
     bedrooms: ''
   });
   const [appliedFilters, setAppliedFilters] = useState(filters);
-  const columns = isBroker ? listColumns : listColumns.concat(actionColumn);
+  const [pdfMessage, setPdfMessage] = useState('');
+  const openingRef = useRef(false);
+  const openBrochure = useCallback(async (id, download) => {
+    if (!id || openingRef.current) return;
+    openingRef.current = true;
+    setPdfMessage(download ? 'Preparing PDF download…' : 'Opening PDF…');
+    setError('');
+    try {
+      const endpoint = (isBroker ? '/api/broker/properties/' : '/api/properties/') + id + '/brochure';
+      const response = await httpClient.get(endpoint, {
+        params: download ? { download: 1 } : undefined,
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      if (download) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'property-' + id + '-brochure.pdf';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        window.open(url, '_blank', 'noopener');
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      let message = 'Unable to open the brochure.';
+      const data = e.response?.data;
+      if (data instanceof Blob) {
+        try {
+          message = JSON.parse(await data.text()).error || message;
+        } catch {
+          message = 'Unable to open the brochure.';
+        }
+      } else if (e.response?.data?.error) {
+        message = e.response.data.error;
+      }
+      setError(message);
+    } finally {
+      openingRef.current = false;
+      setPdfMessage('');
+    }
+  }, [isBroker]);
+  const columns = useMemo(() => listColumns.concat(actionColumn(isBroker, openBrochure)), [isBroker, openBrochure]);
 
   useEffect(() => {
     let active = true;
@@ -167,6 +243,10 @@ const PropertiesPage = () => {
             </Row>
           </Form>
           {error && <Alert variant="danger">{error}</Alert>}
+          {pdfMessage && <div className="d-flex align-items-center gap-2 mb-3 text-muted">
+              <Spinner animation="border" size="sm" role="status" />
+              <span>{pdfMessage}</span>
+            </div>}
           {properties === null ? <div className="text-center py-5">
               <Spinner animation="border" role="status" />
             </div> : <Grid columns={columns} data={properties} className={{

@@ -93,6 +93,16 @@ module.exports = db.define(
       allowNull: true,
     },
 
+    pdf_path: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
+    pdf_generated_at: {
+      type: Sequelize.DATE,
+      allowNull: true,
+    },
+
     company_id: {
       type: Sequelize.STRING,
       allowNull: false,

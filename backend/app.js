@@ -7,7 +7,7 @@ const app = new express();
 const Config = require("./config/config");
 const db = require("./config/db");
 
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "96mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use(function(req, res, next) {
@@ -50,6 +50,7 @@ if (fs.existsSync(frontendIndex)) {
 }
 
 const Properties = require("./modals/Properties");
+require("./modals/PropertyImage");
 
 function ensurePropertyImageColumn() {
   const table = Properties.getTableName();
@@ -57,6 +58,19 @@ function ensurePropertyImageColumn() {
   return db.query("SHOW COLUMNS FROM `" + tableName + "` LIKE 'image'").then(function(result) {
     if (result[0].length) return null;
     return db.query("ALTER TABLE `" + tableName + "` ADD COLUMN `image` VARCHAR(255) NULL");
+  });
+}
+
+function ensurePropertyBrochureColumns() {
+  const table = Properties.getTableName();
+  const tableName = typeof table === "string" ? table : table.tableName;
+  return db.query("SHOW COLUMNS FROM `" + tableName + "` LIKE 'pdf_path'").then(function(result) {
+    if (result[0].length) return null;
+    return db.query(
+      "ALTER TABLE `" + tableName + "` " +
+      "ADD COLUMN `pdf_path` VARCHAR(255) NULL, " +
+      "ADD COLUMN `pdf_generated_at` DATETIME NULL"
+    );
   });
 }
 
@@ -85,7 +99,7 @@ db.sync().then(function() {
   ).catch(function(err) {
     console.log("Unable to update property status values.");
     console.log(err);
-  }).then(ensureContractTenantColumn).then(ensurePropertyImageColumn);
+  }).then(ensureContractTenantColumn).then(ensurePropertyImageColumn).then(ensurePropertyBrochureColumns);
 }).catch(function(err) {
   console.log("Unable to prepare property tables.");
   console.log(err);

@@ -2,18 +2,26 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const Properties = require("../modals/Properties");
+const PropertyImages = require("../modals/PropertyImage");
 const PropertyContracts = require("../modals/PropertyContract");
 const Brokers = require("../modals/Broker");
 const Owners = require("../modals/Owner");
 const Tenants = require("../modals/Tenant");
+const Companies = require("../modals/Comapnies");
 const db = require("../config/db");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 const requireBrokerAuth = require("../middleware/requireBrokerAuth");
 const { Op } = require("sequelize");
+const {
+  resolveBrochureFile,
+  removeBrochure,
+  writePropertyBrochure
+} = require("../services/propertyBrochure");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/properties");
 const STORED_PREFIX = "/uploads/properties/";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGES = 12;
 const IMAGE_TYPES = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
@@ -62,7 +70,9 @@ const LIST_ATTRIBUTES = [
   "status",
   "lat",
   "long",
-  "image"
+  "description",
+  "image",
+  "pdf_path"
 ];
 
 function companyId(req) {
@@ -120,27 +130,120 @@ function removePropertyImage(storedPath) {
   if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
 }
 
-function resolvePropertyImage(value, currentPath) {
-  if (value === undefined) {
-    return { path: currentPath || null };
+function samePaths(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every(function(item, index) {
+    return item === right[index];
+  });
+}
+
+function resolveImageList(items, currentPaths) {
+  if (!Array.isArray(items)) {
+    return { error: "Property pictures must be a list of images.", created: [] };
   }
+  if (items.length > MAX_IMAGES) {
+    return { error: "Upload at most " + MAX_IMAGES + " pictures.", created: [] };
+  }
+
+  const current = new Set(currentPaths);
+  const next = [];
+  const created = [];
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (typeof item !== "string") {
+      return { error: "Each property picture must be an image.", created: created };
+    }
+
+    const text = item.trim();
+    if (text.startsWith("data:")) {
+      const saved = savePropertyImage(text);
+      if (saved.error) return { error: saved.error, created: created };
+      next.push(saved.path);
+      created.push(saved.path);
+      continue;
+    }
+
+    if (current.has(text)) {
+      if (next.includes(text)) {
+        return { error: "Each property picture can only be used once.", created: created };
+      }
+      next.push(text);
+      continue;
+    }
+
+    return { error: "Each property picture must be an image.", created: created };
+  }
+
+  return {
+    paths: next,
+    created: created,
+    removed: currentPaths.filter(function(storedPath) {
+      return !next.includes(storedPath);
+    })
+  };
+}
+
+function resolveLegacyImage(value, currentPaths) {
+  if (value === undefined) {
+    return { paths: currentPaths.slice(), created: [], removed: [] };
+  }
+
+  const current = currentPaths[0] || null;
   if (value == null || value === "") {
-    return { path: null, previous: currentPath || null };
+    return {
+      paths: [],
+      created: [],
+      removed: currentPaths.slice()
+    };
   }
   if (typeof value !== "string") {
-    return { error: "Property image must be an image." };
+    return { error: "Property image must be an image.", created: [] };
   }
 
   const text = value.trim();
   if (text.startsWith("data:")) {
     const saved = savePropertyImage(text);
-    if (saved.error) return saved;
-    return { path: saved.path, previous: currentPath || null, created: saved.path };
+    if (saved.error) return { error: saved.error, created: [] };
+    return {
+      paths: [saved.path],
+      created: [saved.path],
+      removed: currentPaths.filter(function(storedPath) {
+        return storedPath !== saved.path;
+      })
+    };
   }
-  if (currentPath && text === currentPath) {
-    return { path: currentPath };
+  if (current && text === current) {
+    return {
+      paths: [current],
+      created: [],
+      removed: currentPaths.filter(function(storedPath) {
+        return storedPath !== current;
+      })
+    };
   }
-  return { error: "Property image must be an image." };
+  return { error: "Property image must be an image.", created: [] };
+}
+
+function cleanupImages(paths) {
+  (paths || []).forEach(removePropertyImage);
+}
+
+async function currentImagePaths(property) {
+  if (!property) return [];
+  const rows = await PropertyImages.findAll({
+    where: {
+      property_id: property.id,
+      company_id: String(property.company_id)
+    },
+    order: [["sort_order", "ASC"], ["id", "ASC"]]
+  });
+  if (rows.length) {
+    return rows.map(function(row) {
+      return row.path;
+    });
+  }
+  return property.image ? [property.image] : [];
 }
 
 function ownedByCompany(id, ownerCompanyId) {
@@ -328,7 +431,62 @@ async function withContract(property, ownerCompanyId) {
   });
   const data = property.toJSON();
   data.contract = contractPayload(contract);
+  data.images = await currentImagePaths(property);
   return data;
+}
+
+async function replacePropertyImages(propertyId, ownerCompanyId, paths, transaction) {
+  await PropertyImages.destroy({
+    where: {
+      property_id: propertyId,
+      company_id: ownerCompanyId
+    },
+    transaction: transaction
+  });
+
+  if (!paths.length) return;
+
+  await PropertyImages.bulkCreate(paths.map(function(storedPath, index) {
+    return {
+      property_id: propertyId,
+      company_id: ownerCompanyId,
+      path: storedPath,
+      sort_order: index
+    };
+  }), { transaction: transaction });
+}
+
+async function companyNameFor(ownerCompanyId, fallbackName) {
+  const direct = trimmed(fallbackName);
+  if (direct) return direct;
+  const company = await Companies.findByPk(ownerCompanyId);
+  return company ? trimmed(company.name) : "";
+}
+
+async function refreshBrochure(property, ownerCompanyId, companyName, imagePaths) {
+  const previousPath = property.pdf_path || null;
+  let createdPath = null;
+
+  try {
+    const brochure = await writePropertyBrochure({
+      companyName: companyName,
+      property: property,
+      imagePaths: imagePaths
+    });
+    createdPath = brochure.path;
+    await property.update({
+      pdf_path: brochure.path,
+      pdf_generated_at: new Date()
+    });
+    if (previousPath && previousPath !== brochure.path) {
+      removeBrochure(previousPath);
+    }
+    return null;
+  } catch (error) {
+    if (createdPath) removeBrochure(createdPath);
+    console.error("Property brochure generation failed:", error);
+    return "The property was saved, but the PDF brochure could not be generated.";
+  }
 }
 
 async function partyErrors(contract, ownerCompanyId) {
@@ -407,42 +565,80 @@ async function writeProperty(req, res, property) {
     return res.status(422).json({ error: "Validation failed.", fields: parties });
   }
 
-  const image = resolvePropertyImage(
-    (req.body || {}).image,
-    property ? property.image : null
-  );
-  if (image.error) {
+  const ownerCompanyId = companyId(req);
+  const currentPaths = await currentImagePaths(property);
+  const body = req.body || {};
+  const images = Array.isArray(body.images)
+    ? resolveImageList(body.images, currentPaths)
+    : resolveLegacyImage(body.image, currentPaths);
+  if (images.error) {
+    cleanupImages(images.created);
     return res.status(422).json({
       error: "Validation failed.",
-      fields: { image: image.error }
+      fields: { images: images.error }
     });
   }
+
+  const descriptionChanged = !property || trimmed(property.description) !== parsed.values.description;
+  const picturesChanged = !samePaths(currentPaths, images.paths);
+  const brochureMissing = !property || !property.pdf_path;
 
   let saved;
   try {
     saved = await db.transaction(async function(transaction) {
       let record = property;
-      const values = Object.assign({}, parsed.values, { image: image.path });
+      const values = Object.assign({}, parsed.values, {
+        image: images.paths[0] || null
+      });
       if (record) {
         await record.update(values, { transaction: transaction });
       } else {
         record = await Properties.create(Object.assign({}, values, {
-          company_id: companyId(req)
+          company_id: ownerCompanyId
         }), { transaction: transaction });
       }
-      await saveContract(record.id, companyId(req), contract.values, transaction);
+      await saveContract(record.id, ownerCompanyId, contract.values, transaction);
+      await replacePropertyImages(record.id, ownerCompanyId, images.paths, transaction);
       return record;
     });
   } catch (error) {
-    removePropertyImage(image.created);
+    cleanupImages(images.created);
     throw error;
   }
 
-  if (image.previous && image.previous !== image.path) {
-    removePropertyImage(image.previous);
+  cleanupImages(images.removed);
+
+  let pdfWarning = null;
+  if (!property || descriptionChanged || picturesChanged || brochureMissing) {
+    const name = await companyNameFor(ownerCompanyId, req.company && req.company.name);
+    pdfWarning = await refreshBrochure(saved, ownerCompanyId, name, images.paths);
   }
 
-  return res.status(property ? 200 : 201).json(await withContract(saved, companyId(req)));
+  const payload = await withContract(saved, ownerCompanyId);
+  if (pdfWarning) payload.pdf_warning = pdfWarning;
+  return res.status(property ? 200 : 201).json(payload);
+}
+
+async function sendBrochure(req, res, ownerCompanyId) {
+  const property = await ownedByCompany(req.params.id, ownerCompanyId);
+  if (!property) {
+    return res.status(404).json({ error: "Property not found." });
+  }
+
+  const filePath = resolveBrochureFile(property.pdf_path);
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "Brochure is not available for this property." });
+  }
+
+  const download = req.query.download === "1" || req.query.download === "true";
+  const filename = "property-" + property.id + "-brochure.pdf";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    (download ? "attachment" : "inline") + "; filename=\"" + filename + "\""
+  );
+  res.setHeader("Cache-Control", "private, no-store");
+  return fs.createReadStream(filePath).pipe(res);
 }
 
 module.exports = function(app) {
@@ -510,6 +706,24 @@ module.exports = function(app) {
     } catch (error) {
       console.error("Get properties failed:", error);
       return res.status(500).json({ error: "Unable to retrieve properties." });
+    }
+  });
+
+  app.get("/api/properties/:id/brochure", requireCompanyAuth, async function(req, res) {
+    try {
+      return await sendBrochure(req, res, companyId(req));
+    } catch (error) {
+      console.error("Open property brochure failed:", error);
+      return res.status(500).json({ error: "Unable to open the brochure." });
+    }
+  });
+
+  app.get("/api/broker/properties/:id/brochure", requireBrokerAuth, async function(req, res) {
+    try {
+      return await sendBrochure(req, res, String(req.broker.company_id || ""));
+    } catch (error) {
+      console.error("Open broker property brochure failed:", error);
+      return res.status(500).json({ error: "Unable to open the brochure." });
     }
   });
 
