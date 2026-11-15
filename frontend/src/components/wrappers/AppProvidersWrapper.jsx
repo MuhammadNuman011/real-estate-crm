@@ -5,8 +5,14 @@ import { AuthProvider } from '@/context/useAuthContext';
 import { LayoutProvider } from '@/context/useLayoutContext';
 import { NotificationProvider } from '@/context/useNotificationContext';
 import { HelmetProvider } from 'react-helmet-async';
+let visibleTitle = DEFAULT_PAGE_TITLE;
 const handleChangeTitle = () => {
-  if (document.visibilityState == 'hidden') document.title = 'Please come back 🥺';else document.title = DEFAULT_PAGE_TITLE;
+  if (document.visibilityState === 'hidden') {
+    visibleTitle = document.title;
+    document.title = 'Please come back 🥺';
+  } else {
+    document.title = visibleTitle;
+  }
 };
 const AppProvidersWrapper = ({
   children

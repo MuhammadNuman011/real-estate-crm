@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { Op } = require("sequelize");
 const Brokers = require("../modals/Broker");
+const Companies = require("../modals/Comapnies");
 const { hashPassword, authenticateBroker } = require("../helpers/helper");
 const { createBrokerToken } = require("../helpers/token");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
@@ -216,10 +217,15 @@ module.exports = function(app) {
 
       await authentication.broker.update({ last_login_at: new Date() });
 
+      const company = authentication.broker.company_id
+        ? await Companies.findByPk(authentication.broker.company_id)
+        : null;
+
       return res.status(200).json({
         message: "Broker successfully logged in.",
         token: createBrokerToken(authentication.broker),
-        broker: serializeBroker(authentication.broker)
+        broker: serializeBroker(authentication.broker),
+        company: company ? { name: company.name } : null
       });
     } catch (error) {
       console.error("Broker login failed:", error);

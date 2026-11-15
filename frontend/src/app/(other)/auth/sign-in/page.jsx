@@ -7,7 +7,7 @@ import LoginForm from './LoginForm';
 import signInImg from '@/assets/images/sign-in.svg';
 const SignIn = () => {
   return <>
-      <PageMetaData title="Sign In" />
+      <PageMetaData title="CRM Login" exact />
 
       <Card className="auth-card">
         <CardBody className="p-0">
@@ -27,7 +27,7 @@ const SignIn = () => {
                   className: 'me-1'
                 }} containerClassName="mx-auto mb-4 text-center auth-logo" />
                 </div>
-                <h2 className="fw-bold text-center fs-18">Sign In</h2>
+                <h2 className="fw-bold text-center fs-18">CRM Login</h2>
                 <p className="text-muted text-center mt-1 mb-4">Enter your admin ID and password to access the dashboard.</p>
                 <Row className="justify-content-center">
                   <Col xs={12} md={8}>

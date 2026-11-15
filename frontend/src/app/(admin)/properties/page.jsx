@@ -11,6 +11,16 @@ import { mediaUrl } from '@/helpers/mediaUrl';
 import { statusBadge } from '@/helpers/statusBadge';
 
 const PROPERTY_PLACEHOLDER = '/property-placeholder.svg';
+const EDIT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><g fill="none"><path fill="currentColor" d="m5 16l-1 4l4-1L18 9l-3-3z" opacity=".16"/><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 16l-1 4l4-1L19.586 7.414a2 2 0 0 0 0-2.828l-.172-.172a2 2 0 0 0-2.828 0zM15 6l3 3m-5 11h8"/></g></svg>';
+const PDF_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8.267 14.68c-.184 0-.308.018-.372.036v1.178c.076.018.171.023.302.023c.479 0 .774-.242.774-.651c0-.366-.254-.586-.704-.586m3.487.012c-.2 0-.33.018-.407.036v2.61c.077.018.201.018.313.018c.817.006 1.349-.444 1.349-1.396c.006-.83-.479-1.268-1.255-1.268"/><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM9.498 16.19c-.309.29-.765.42-1.296.42a2 2 0 0 1-.308-.018v1.426H7v-3.936A7.6 7.6 0 0 1 8.219 14c.557 0 .953.106 1.22.319c.254.202.426.533.426.923c-.001.392-.131.723-.367.948m3.807 1.355c-.42.349-1.059.515-1.84.515c-.468 0-.799-.03-1.024-.06v-3.917A8 8 0 0 1 11.66 14c.757 0 1.249.136 1.633.426c.415.308.675.799.675 1.504c0 .763-.279 1.29-.663 1.615M17 14.77h-1.532v.911H16.9v.734h-1.432v1.604h-.906V14.03H17zM14 9h-1V4l5 5z"/></svg>';
+
+function actionIcon(markup) {
+  return h('span', {
+    className: 'd-inline-flex lh-1',
+    style: { fontSize: '1.05rem' },
+    dangerouslySetInnerHTML: { __html: markup }
+  });
+}
 
 const listColumns = [{
   id: 'image',
@@ -63,27 +73,23 @@ function actionColumn(isBroker, openBrochure) {
       if (!isBroker) {
         buttons.push(h('a', {
           href: '/properties/' + propertyId + '/edit',
-          className: 'btn btn-sm btn-outline-primary'
-        }, 'Edit'));
+          className: 'btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center',
+          title: 'Edit',
+          'aria-label': 'Edit',
+          style: { width: '2rem', height: '2rem' }
+        }, actionIcon(EDIT_ICON)));
       }
       buttons.push(h('button', {
         type: 'button',
-        className: 'btn btn-sm btn-outline-secondary',
+        className: 'btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center',
         disabled: !hasPdf,
         title: hasPdf ? 'View PDF' : 'Save the property to generate a brochure.',
+        'aria-label': 'View PDF',
+        style: { width: '2rem', height: '2rem' },
         onClick: () => {
-          if (hasPdf) openBrochure(propertyId, false);
+          if (hasPdf) openBrochure(propertyId);
         }
-      }, 'View PDF'));
-      buttons.push(h('button', {
-        type: 'button',
-        className: 'btn btn-sm btn-outline-secondary',
-        disabled: !hasPdf,
-        title: hasPdf ? 'Download PDF' : 'Save the property to generate a brochure.',
-        onClick: () => {
-          if (hasPdf) openBrochure(propertyId, true);
-        }
-      }, 'Download PDF'));
+      }, actionIcon(PDF_ICON)));
       return h('div', { className: 'd-flex flex-wrap gap-1' }, buttons);
     }
   };
@@ -126,29 +132,19 @@ const PropertiesPage = () => {
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [pdfMessage, setPdfMessage] = useState('');
   const openingRef = useRef(false);
-  const openBrochure = useCallback(async (id, download) => {
+  const openBrochure = useCallback(async (id) => {
     if (!id || openingRef.current) return;
     openingRef.current = true;
-    setPdfMessage(download ? 'Preparing PDF download…' : 'Opening PDF…');
+    setPdfMessage('Opening PDF…');
     setError('');
     try {
       const endpoint = (isBroker ? '/api/broker/properties/' : '/api/properties/') + id + '/brochure';
       const response = await httpClient.get(endpoint, {
-        params: download ? { download: 1 } : undefined,
         responseType: 'blob'
       });
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      if (download) {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'property-' + id + '-brochure.pdf';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } else {
-        window.open(url, '_blank', 'noopener');
-      }
+      window.open(url, '_blank', 'noopener');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       let message = 'Unable to open the brochure.';

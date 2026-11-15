@@ -7,7 +7,7 @@ import signInImg from '@/assets/images/sign-in.svg';
 
 const BrokerSignIn = () => {
   return <>
-      <PageMetaData title="Broker Sign In" />
+      <PageMetaData title="CRM Login" exact />
 
       <Card className="auth-card">
         <CardBody className="p-0">
@@ -27,7 +27,7 @@ const BrokerSignIn = () => {
                   className: 'me-1'
                 }} containerClassName="mx-auto mb-4 text-center auth-logo" />
                 </div>
-                <h2 className="fw-bold text-center fs-18">Broker Sign In</h2>
+                <h2 className="fw-bold text-center fs-18">CRM Login</h2>
                 <p className="text-muted text-center mt-1 mb-4">Enter your email and password to view active properties.</p>
                 <Row className="justify-content-center">
                   <Col xs={12} md={8}>

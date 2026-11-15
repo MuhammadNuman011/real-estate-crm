@@ -34,7 +34,8 @@ const useBrokerSignIn = () => {
         saveSession({
           role: 'broker',
           token: res.data.token,
-          broker: res.data.broker
+          broker: res.data.broker,
+          company: res.data.company || null
         });
         navigate('/properties', { replace: true });
         showNotification({
