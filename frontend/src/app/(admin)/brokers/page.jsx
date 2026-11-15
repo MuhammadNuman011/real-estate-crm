@@ -6,6 +6,7 @@ import { Grid } from 'gridjs-react';
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import httpClient from '@/helpers/httpClient';
+import { mediaUrl } from '@/helpers/mediaUrl';
 import { statusBadge } from '@/helpers/statusBadge';
 
 const columns = [{
@@ -15,7 +16,7 @@ const columns = [{
   formatter: cell => {
     if (!cell) return '';
     return h('img', {
-      src: cell,
+      src: mediaUrl(cell),
       alt: '',
       width: 40,
       height: 40,

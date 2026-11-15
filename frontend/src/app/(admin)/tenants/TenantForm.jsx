@@ -8,6 +8,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
+import { mediaUrl } from '@/helpers/mediaUrl';
 
 const COUNTRY_CODES = [{
   value: '+966',
@@ -322,7 +323,7 @@ const TenantForm = ({ mode }) => {
                     {frontError ? <div className="invalid-feedback d-block">{frontError}</div> : null}
                     <div className="text-muted small mt-1">JPG, PNG, or WebP, up to 5 MB.</div>
                     {frontPreview ? <div className="mt-2 d-flex align-items-center gap-3">
-                        <img src={frontPreview} alt="National ID front preview" width="96" height="64" style={{ objectFit: 'cover', borderRadius: '4px' }} />
+                        <img src={mediaUrl(frontPreview)} alt="National ID front preview" width="96" height="64" style={{ objectFit: 'cover', borderRadius: '4px' }} />
                         <Button type="button" variant="outline-danger" size="sm" onClick={() => {
                           setFrontFile(null);
                           setFrontPreview('');
@@ -341,7 +342,7 @@ const TenantForm = ({ mode }) => {
                     {backError ? <div className="invalid-feedback d-block">{backError}</div> : null}
                     <div className="text-muted small mt-1">JPG, PNG, or WebP, up to 5 MB.</div>
                     {backPreview ? <div className="mt-2 d-flex align-items-center gap-3">
-                        <img src={backPreview} alt="National ID back preview" width="96" height="64" style={{ objectFit: 'cover', borderRadius: '4px' }} />
+                        <img src={mediaUrl(backPreview)} alt="National ID back preview" width="96" height="64" style={{ objectFit: 'cover', borderRadius: '4px' }} />
                         <Button type="button" variant="outline-danger" size="sm" onClick={() => {
                           setBackFile(null);
                           setBackPreview('');

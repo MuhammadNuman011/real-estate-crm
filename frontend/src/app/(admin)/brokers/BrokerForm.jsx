@@ -8,6 +8,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
+import { mediaUrl } from '@/helpers/mediaUrl';
 
 const COUNTRY_CODES = [{
   value: '+966',
@@ -290,7 +291,7 @@ const BrokerForm = ({ mode }) => {
                     {pictureError ? <div className="invalid-feedback d-block">{pictureError}</div> : null}
                     <div className="text-muted small mt-1">JPG, PNG, or WebP from your computer, up to 5 MB.</div>
                     {picturePreview ? <div className="mt-2 d-flex align-items-center gap-3">
-                        <img src={picturePreview} alt="Profile preview" width="72" height="72" style={{ objectFit: 'cover', borderRadius: '4px' }} />
+                        <img src={mediaUrl(picturePreview)} alt="Profile preview" width="72" height="72" style={{ objectFit: 'cover', borderRadius: '4px' }} />
                         <Button type="button" variant="outline-danger" size="sm" onClick={clearPicture}>
                           Remove picture
                         </Button>

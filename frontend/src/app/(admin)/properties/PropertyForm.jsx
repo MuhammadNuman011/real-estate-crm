@@ -8,6 +8,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
+import { mediaUrl } from '@/helpers/mediaUrl';
 import LocationMap from './LocationMap';
 
 const schema = yup.object({
@@ -474,7 +475,7 @@ const PropertyForm = ({ mode }) => {
                   <Form.Label>Property pictures</Form.Label>
                   {pictures.length ? <div className="d-flex flex-wrap gap-3 mb-2">
                       {pictures.map((picture, index) => <div key={picture.key} className="border rounded p-2" style={{ width: 168 }}>
-                          <img src={picture.preview} alt={'Property picture ' + (index + 1)} style={{ width: '100%', height: 108, objectFit: 'contain', background: '#e9ecef', borderRadius: 4 }} />
+                          <img src={mediaUrl(picture.preview)} alt={'Property picture ' + (index + 1)} style={{ width: '100%', height: 108, objectFit: 'contain', background: '#e9ecef', borderRadius: 4 }} />
                           <div className="d-flex gap-1 mt-2">
                             <Button type="button" variant="outline-secondary" size="sm" disabled={index === 0} onClick={() => movePicture(index, -1)}>
                               Left

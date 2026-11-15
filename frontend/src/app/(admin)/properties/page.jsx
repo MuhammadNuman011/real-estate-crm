@@ -7,6 +7,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useAuthContext } from '@/context/useAuthContext';
 import httpClient from '@/helpers/httpClient';
+import { mediaUrl } from '@/helpers/mediaUrl';
 import { statusBadge } from '@/helpers/statusBadge';
 
 const PROPERTY_PLACEHOLDER = '/property-placeholder.svg';
@@ -16,7 +17,7 @@ const listColumns = [{
   name: 'Photo',
   sort: false,
   formatter: cell => h('img', {
-    src: cell || PROPERTY_PLACEHOLDER,
+    src: mediaUrl(cell) || PROPERTY_PLACEHOLDER,
     alt: '',
     width: 56,
     height: 42,
