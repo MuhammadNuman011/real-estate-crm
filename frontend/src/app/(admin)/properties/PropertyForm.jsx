@@ -178,6 +178,28 @@ function withCurrentPerson(people, currentId) {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 12;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const IMAGE_EXTENSIONS = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp'
+};
+
+function pictureKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'pic-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+function imageType(file) {
+  const type = String(file?.type || '').toLowerCase();
+  if (type === 'image/jpg' || type === 'image/pjpeg' || type === 'image/x-citrix-jpeg') return 'image/jpeg';
+  if (type === 'image/x-png') return 'image/png';
+  if (IMAGE_TYPES.includes(type)) return type;
+  const extension = String(file?.name || '').split('.').pop().toLowerCase();
+  return IMAGE_EXTENSIONS[extension] || '';
+}
 
 const PropertyForm = ({ mode }) => {
   const isEdit = mode === 'edit';
@@ -284,7 +306,7 @@ const PropertyForm = ({ mode }) => {
           ? property.images
           : (property.image ? [property.image] : []);
         setPictures(storedImages.map(storedPath => ({
-          key: crypto.randomUUID(),
+          key: pictureKey(),
           preview: storedPath,
           storedPath,
           dataUrl: null
@@ -308,53 +330,69 @@ const PropertyForm = ({ mode }) => {
 
   const readPicture = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-    reader.onerror = () => reject(new Error('Unable to read the image.'));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string' && result.startsWith('data:image/')) {
+        resolve(result);
+        return;
+      }
+      reject(new Error('Unable to read the image.'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Unable to read the image.'));
     reader.readAsDataURL(file);
   });
 
   const onImagesChange = async event => {
-    const selected = Array.from(event.target.files || []);
-    event.target.value = '';
+    const input = event.currentTarget;
+    const selected = Array.from(input.files || []);
     if (!selected.length) return;
 
     const remaining = MAX_IMAGES - pictures.length;
     if (remaining <= 0) {
+      input.value = '';
       setImageError('Upload at most ' + MAX_IMAGES + ' pictures.');
       return;
     }
 
     const accepted = [];
     let message = '';
-    selected.slice(0, remaining).forEach(file => {
-      if (!IMAGE_TYPES.includes(file.type)) {
+    for (const file of selected.slice(0, remaining)) {
+      const type = imageType(file);
+      if (!type) {
         message = 'Use JPG, JPEG, PNG, or WebP images.';
-        return;
+        continue;
       }
       if (file.size > MAX_IMAGE_BYTES) {
         message = 'Each picture must be under 5 MB.';
-        return;
+        continue;
       }
-      accepted.push(file);
-    });
+      try {
+        // Copy the bytes before clearing the input. Chrome drops the original
+        // File once the input value is reset, and FileReader then fails.
+        const buffer = await file.arrayBuffer();
+        accepted.push(new File([buffer], file.name, { type, lastModified: file.lastModified }));
+      } catch {
+        message = 'Unable to read ' + (file.name || 'one of the images') + '.';
+      }
+    }
+    input.value = '';
     if (selected.length > remaining) {
       message = 'Upload at most ' + MAX_IMAGES + ' pictures.';
     }
 
     try {
-      const loaded = await Promise.all(accepted.map(async file => ({
-        key: crypto.randomUUID(),
-        preview: await readPicture(file),
-        storedPath: null,
-        dataUrl: null
-      })));
-      const next = loaded.map(picture => ({
-        ...picture,
-        dataUrl: picture.preview
+      const loaded = await Promise.all(accepted.map(async file => {
+        const preview = await readPicture(file);
+        return {
+          key: pictureKey(),
+          preview,
+          storedPath: null,
+          dataUrl: preview
+        };
       }));
-      setPictures(current => current.concat(next).slice(0, MAX_IMAGES));
+      setPictures(current => current.concat(loaded).slice(0, MAX_IMAGES));
       setImageError(message);
-    } catch (e) {
+    } catch {
       setImageError('Unable to read one of the images.');
     }
   };
