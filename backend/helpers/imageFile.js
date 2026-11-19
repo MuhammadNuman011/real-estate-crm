@@ -3,6 +3,7 @@ const convertHeif = require("heic-convert");
 
 const MAX_STORED_BYTES = 5 * 1024 * 1024;
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
+const WATERMARK_MARKER = "crm-property-watermark";
 
 const CLAIMED_TYPES = {
   "image/jpeg": "jpeg",
@@ -111,6 +112,105 @@ async function compressToLimit(buffer, maxBytes) {
   return null;
 }
 
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function hasWatermarkMarker(metadata) {
+  const marker = Buffer.from(WATERMARK_MARKER);
+  if (metadata.exif && Buffer.isBuffer(metadata.exif) && metadata.exif.includes(marker)) return true;
+  if (metadata.xmp && Buffer.isBuffer(metadata.xmp) && metadata.xmp.includes(marker)) return true;
+  if (!Array.isArray(metadata.comments)) return false;
+  return metadata.comments.some(function(comment) {
+    return String(comment).indexOf(WATERMARK_MARKER) !== -1;
+  });
+}
+
+async function applyCompanyWatermark(buffer, companyName) {
+  const label = String(companyName || "").replace(/\s+/g, " ").trim();
+  if (!label) return { buffer: buffer };
+
+  const metadata = await sharp(buffer, { failOn: "none" }).metadata();
+  if (hasWatermarkMarker(metadata)) return { buffer: buffer };
+
+  const width = metadata.width || 0;
+  const height = metadata.height || 0;
+  if (!width || !height) {
+    throw new Error("Image dimensions are unavailable.");
+  }
+
+  const fontSize = Math.max(24, Math.min(120, Math.round(Math.min(width, height) * 0.08)));
+  const pad = Math.max(10, Math.round(fontSize * 0.7));
+  const maxChars = Math.max(4, Math.floor(Math.max(fontSize, width - pad * 2) / (fontSize * 0.55)));
+  let text = label;
+  if (text.length > maxChars) {
+    text = text.slice(0, Math.max(1, maxChars - 3)) + "...";
+  }
+
+  const svgWidth = Math.min(width, Math.ceil(text.length * fontSize * 0.62) + pad * 2);
+  const svgHeight = Math.min(height, Math.ceil(fontSize * 1.5) + pad);
+  const textX = Math.round(svgWidth / 2);
+  const textY = Math.round(svgHeight / 2 + fontSize * 0.35);
+  const svg = Buffer.from(
+    "<svg width=\"" + svgWidth + "\" height=\"" + svgHeight + "\" xmlns=\"http://www.w3.org/2000/svg\">" +
+      "<text x=\"" + textX + "\" y=\"" + textY + "\" text-anchor=\"middle\" " +
+      "font-family=\"Arial, Helvetica, sans-serif\" font-size=\"" + fontSize + "\" font-weight=\"600\" " +
+      "fill=\"rgba(255,255,255,0.58)\" stroke=\"rgba(0,0,0,0.38)\" stroke-width=\"" + Math.max(1, Math.round(fontSize / 16)) + "\" " +
+      "paint-order=\"stroke\">" + escapeXml(text) + "</text></svg>"
+  );
+
+  let pipeline = sharp(buffer, { failOn: "none" })
+    .composite([{
+      input: svg,
+      left: Math.round((width - svgWidth) / 2),
+      top: Math.round((height - svgHeight) / 2)
+    }])
+    .withMetadata({
+      exif: {
+        IFD0: {
+          ImageDescription: WATERMARK_MARKER
+        }
+      }
+    });
+
+  const format = metadata.format;
+  if (format === "png") {
+    pipeline = pipeline.png();
+  } else if (format === "webp") {
+    pipeline = pipeline.webp({ quality: 92 });
+  } else {
+    pipeline = pipeline.jpeg({ quality: 92, mozjpeg: true });
+  }
+
+  let output = await pipeline.toBuffer();
+  let extension = EXTENSIONS[format] || EXTENSIONS.jpeg;
+
+  if (output.length > MAX_STORED_BYTES) {
+    const fitted = await compressToLimit(output, MAX_STORED_BYTES);
+    if (!fitted) {
+      throw new Error("Watermarked image exceeds the stored size limit.");
+    }
+    output = await sharp(fitted, { failOn: "none" })
+      .withMetadata({
+        exif: {
+          IFD0: {
+            ImageDescription: WATERMARK_MARKER
+          }
+        }
+      })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+    extension = EXTENSIONS.jpeg;
+  }
+
+  return { buffer: output, extension: extension };
+}
+
 async function prepareStoredImage(dataUrl, label) {
   if (typeof dataUrl !== "string") {
     return { error: formatError(label) };
@@ -170,5 +270,6 @@ async function prepareStoredImage(dataUrl, label) {
 module.exports = {
   MAX_STORED_BYTES: MAX_STORED_BYTES,
   MAX_SOURCE_BYTES: MAX_SOURCE_BYTES,
-  prepareStoredImage: prepareStoredImage
+  prepareStoredImage: prepareStoredImage,
+  applyCompanyWatermark: applyCompanyWatermark
 };

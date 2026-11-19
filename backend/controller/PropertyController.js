@@ -17,7 +17,7 @@ const {
   removeBrochure,
   writePropertyBrochure
 } = require("../services/propertyBrochure");
-const { prepareStoredImage } = require("../helpers/imageFile");
+const { prepareStoredImage, applyCompanyWatermark } = require("../helpers/imageFile");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/properties");
 const STORED_PREFIX = "/uploads/properties/";
@@ -101,13 +101,24 @@ function propertyListWhere(req, baseWhere) {
   return { where: where };
 }
 
-async function savePropertyImage(dataUrl) {
+async function savePropertyImage(dataUrl, companyName) {
   const prepared = await prepareStoredImage(dataUrl, "Property image");
   if (prepared.error) return prepared;
 
+  let buffer = prepared.buffer;
+  let extension = prepared.extension;
+  try {
+    const marked = await applyCompanyWatermark(buffer, companyName);
+    buffer = marked.buffer;
+    if (marked.extension) extension = marked.extension;
+  } catch (error) {
+    console.error("Property image watermark failed:", error);
+    return { error: "Property image could not be processed." };
+  }
+
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const filename = crypto.randomBytes(16).toString("hex") + prepared.extension;
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), prepared.buffer);
+  const filename = crypto.randomBytes(16).toString("hex") + extension;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
   return { path: STORED_PREFIX + filename };
 }
 
@@ -126,7 +137,7 @@ function samePaths(left, right) {
   });
 }
 
-async function resolveImageList(items, currentPaths) {
+async function resolveImageList(items, currentPaths, companyName) {
   if (!Array.isArray(items)) {
     return { error: "Property pictures must be a list of images.", created: [] };
   }
@@ -146,7 +157,7 @@ async function resolveImageList(items, currentPaths) {
 
     const text = item.trim();
     if (text.startsWith("data:")) {
-      const saved = await savePropertyImage(text);
+      const saved = await savePropertyImage(text, companyName);
       if (saved.error) return { error: saved.error, created: created };
       next.push(saved.path);
       created.push(saved.path);
@@ -173,7 +184,7 @@ async function resolveImageList(items, currentPaths) {
   };
 }
 
-async function resolveLegacyImage(value, currentPaths) {
+async function resolveLegacyImage(value, currentPaths, companyName) {
   if (value === undefined) {
     return { paths: currentPaths.slice(), created: [], removed: [] };
   }
@@ -192,7 +203,7 @@ async function resolveLegacyImage(value, currentPaths) {
 
   const text = value.trim();
   if (text.startsWith("data:")) {
-    const saved = await savePropertyImage(text);
+    const saved = await savePropertyImage(text, companyName);
     if (saved.error) return { error: saved.error, created: [] };
     return {
       paths: [saved.path],
@@ -571,9 +582,10 @@ async function writeProperty(req, res, property) {
   const ownerCompanyId = companyId(req);
   const currentPaths = await currentImagePaths(property);
   const body = req.body || {};
+  const watermarkName = await companyNameFor(ownerCompanyId, req.company && req.company.name);
   const images = Array.isArray(body.images)
-    ? await resolveImageList(body.images, currentPaths)
-    : await resolveLegacyImage(body.image, currentPaths);
+    ? await resolveImageList(body.images, currentPaths, watermarkName)
+    : await resolveLegacyImage(body.image, currentPaths, watermarkName);
   if (images.error) {
     cleanupImages(images.created);
     return res.status(422).json({
