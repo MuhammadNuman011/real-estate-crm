@@ -15,5 +15,6 @@ module.exports = {
   dbURI: process.env.DB_URI,
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "8h",
+  refreshExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "30d",
   frontendUrl: process.env.FRONTEND_URL
 };

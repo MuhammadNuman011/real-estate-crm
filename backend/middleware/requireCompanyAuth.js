@@ -19,6 +19,10 @@ async function requireCompanyAuth(req, res, next) {
       return res.status(401).json({ error: "Invalid or missing authentication token." });
     }
 
+    if (payload.type === "refresh") {
+      return res.status(401).json({ error: "Invalid or missing authentication token." });
+    }
+
     if (payload && payload.role === "broker") {
       return res.status(403).json({ error: "You do not have access to this module." });
     }

@@ -6,6 +6,7 @@ const Brokers = require("../modals/Broker");
 const Companies = require("../modals/Comapnies");
 const { hashPassword, authenticateBroker } = require("../helpers/helper");
 const { createBrokerToken } = require("../helpers/token");
+const { issueRefreshToken } = require("../helpers/refreshSession");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 const { prepareStoredImage } = require("../helpers/imageFile");
 
@@ -209,9 +210,13 @@ module.exports = function(app) {
         ? await Companies.findByPk(authentication.broker.company_id)
         : null;
 
+      const accessToken = createBrokerToken(authentication.broker);
+      const refreshToken = await issueRefreshToken("broker", authentication.broker.id);
       return res.status(200).json({
         message: "Broker successfully logged in.",
-        token: createBrokerToken(authentication.broker),
+        token: accessToken,
+        access_token: accessToken,
+        refresh_token: refreshToken,
         broker: serializeBroker(authentication.broker),
         company: company ? { name: company.name } : null
       });

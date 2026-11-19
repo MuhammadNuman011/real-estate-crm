@@ -1,6 +1,7 @@
 const Companies = require("../modals/Comapnies");
 const { hashPassword, authenticateCompany } = require("../helpers/helper");
 const { createCompanyToken } = require("../helpers/token");
+const { issueRefreshToken } = require("../helpers/refreshSession");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 
 function serializeCompany(company) {
@@ -108,9 +109,13 @@ module.exports = function(app) {
         return res.status(403).json({ error: "Company account is inactive." });
       }
 
+      const accessToken = createCompanyToken(authentication.company);
+      const refreshToken = await issueRefreshToken("company", authentication.company.id);
       return res.status(200).json({
         message: "Company successfully logged in.",
-        token: createCompanyToken(authentication.company),
+        token: accessToken,
+        access_token: accessToken,
+        refresh_token: refreshToken,
         company: serializeCompany(authentication.company)
       });
     } catch (error) {
