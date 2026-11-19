@@ -17,16 +17,11 @@ const {
   removeBrochure,
   writePropertyBrochure
 } = require("../services/propertyBrochure");
+const { prepareStoredImage } = require("../helpers/imageFile");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/properties");
 const STORED_PREFIX = "/uploads/properties/";
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 12;
-const IMAGE_TYPES = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp"
-};
 
 function trimmed(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -106,20 +101,13 @@ function propertyListWhere(req, baseWhere) {
   return { where: where };
 }
 
-function savePropertyImage(dataUrl) {
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
-  if (!match || !IMAGE_TYPES[match[1]]) {
-    return { error: "Property image must be a JPG, JPEG, PNG, or WebP image." };
-  }
-
-  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
-  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
-    return { error: "Property image must be under 5 MB." };
-  }
+async function savePropertyImage(dataUrl) {
+  const prepared = await prepareStoredImage(dataUrl, "Property image");
+  if (prepared.error) return prepared;
 
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const filename = crypto.randomBytes(16).toString("hex") + IMAGE_TYPES[match[1]];
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+  const filename = crypto.randomBytes(16).toString("hex") + prepared.extension;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), prepared.buffer);
   return { path: STORED_PREFIX + filename };
 }
 
@@ -138,7 +126,7 @@ function samePaths(left, right) {
   });
 }
 
-function resolveImageList(items, currentPaths) {
+async function resolveImageList(items, currentPaths) {
   if (!Array.isArray(items)) {
     return { error: "Property pictures must be a list of images.", created: [] };
   }
@@ -158,7 +146,7 @@ function resolveImageList(items, currentPaths) {
 
     const text = item.trim();
     if (text.startsWith("data:")) {
-      const saved = savePropertyImage(text);
+      const saved = await savePropertyImage(text);
       if (saved.error) return { error: saved.error, created: created };
       next.push(saved.path);
       created.push(saved.path);
@@ -185,7 +173,7 @@ function resolveImageList(items, currentPaths) {
   };
 }
 
-function resolveLegacyImage(value, currentPaths) {
+async function resolveLegacyImage(value, currentPaths) {
   if (value === undefined) {
     return { paths: currentPaths.slice(), created: [], removed: [] };
   }
@@ -204,7 +192,7 @@ function resolveLegacyImage(value, currentPaths) {
 
   const text = value.trim();
   if (text.startsWith("data:")) {
-    const saved = savePropertyImage(text);
+    const saved = await savePropertyImage(text);
     if (saved.error) return { error: saved.error, created: [] };
     return {
       paths: [saved.path],
@@ -584,8 +572,8 @@ async function writeProperty(req, res, property) {
   const currentPaths = await currentImagePaths(property);
   const body = req.body || {};
   const images = Array.isArray(body.images)
-    ? resolveImageList(body.images, currentPaths)
-    : resolveLegacyImage(body.image, currentPaths);
+    ? await resolveImageList(body.images, currentPaths)
+    : await resolveLegacyImage(body.image, currentPaths);
   if (images.error) {
     cleanupImages(images.created);
     return res.status(422).json({

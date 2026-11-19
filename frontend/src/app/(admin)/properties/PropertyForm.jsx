@@ -8,6 +8,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
+import { IMAGE_FILE_ACCEPT, prepareImageFile } from '@/helpers/imageFile';
 import { mediaUrl } from '@/helpers/mediaUrl';
 import LocationMap from './LocationMap';
 
@@ -176,30 +177,13 @@ function withCurrentPerson(people, currentId) {
   return [{ id: currentId, name: 'Saved record' }, ...people];
 }
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 12;
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const IMAGE_EXTENSIONS = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp'
-};
 
 function pictureKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
   return 'pic-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
-}
-
-function imageType(file) {
-  const type = String(file?.type || '').toLowerCase();
-  if (type === 'image/jpg' || type === 'image/pjpeg' || type === 'image/x-citrix-jpeg') return 'image/jpeg';
-  if (type === 'image/x-png') return 'image/png';
-  if (IMAGE_TYPES.includes(type)) return type;
-  const extension = String(file?.name || '').split('.').pop().toLowerCase();
-  return IMAGE_EXTENSIONS[extension] || '';
 }
 
 const PropertyForm = ({ mode }) => {
@@ -329,20 +313,6 @@ const PropertyForm = ({ mode }) => {
     setValue('long', nextLng, { shouldValidate: true, shouldDirty: true });
   }, [setValue]);
 
-  const readPicture = file => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result === 'string' && result.startsWith('data:image/')) {
-        resolve(result);
-        return;
-      }
-      reject(new Error('Unable to read the image.'));
-    };
-    reader.onerror = () => reject(reader.error || new Error('Unable to read the image.'));
-    reader.readAsDataURL(file);
-  });
-
   const onImagesChange = async event => {
     const input = event.currentTarget;
     const selected = Array.from(input.files || []);
@@ -358,44 +328,25 @@ const PropertyForm = ({ mode }) => {
     const accepted = [];
     let message = '';
     for (const file of selected.slice(0, remaining)) {
-      const type = imageType(file);
-      if (!type) {
-        message = 'Use JPG, JPEG, PNG, or WebP images.';
+      const prepared = await prepareImageFile(file);
+      if (prepared.error) {
+        message = prepared.error;
         continue;
       }
-      if (file.size > MAX_IMAGE_BYTES) {
-        message = 'Each picture must be under 5 MB.';
-        continue;
-      }
-      try {
-        // Copy the bytes before clearing the input. Chrome drops the original
-        // File once the input value is reset, and FileReader then fails.
-        const buffer = await file.arrayBuffer();
-        accepted.push(new File([buffer], file.name, { type, lastModified: file.lastModified }));
-      } catch {
-        message = 'Unable to read ' + (file.name || 'one of the images') + '.';
-      }
+      accepted.push({
+        key: pictureKey(),
+        preview: prepared.dataUrl,
+        storedPath: null,
+        dataUrl: prepared.dataUrl
+      });
     }
     input.value = '';
     if (selected.length > remaining) {
       message = 'Upload at most ' + MAX_IMAGES + ' pictures.';
     }
 
-    try {
-      const loaded = await Promise.all(accepted.map(async file => {
-        const preview = await readPicture(file);
-        return {
-          key: pictureKey(),
-          preview,
-          storedPath: null,
-          dataUrl: preview
-        };
-      }));
-      setPictures(current => current.concat(loaded).slice(0, MAX_IMAGES));
-      setImageError(message);
-    } catch {
-      setImageError('Unable to read one of the images.');
-    }
+    setPictures(current => current.concat(accepted).slice(0, MAX_IMAGES));
+    setImageError(message);
   };
 
   const removePicture = key => {
@@ -490,9 +441,9 @@ const PropertyForm = ({ mode }) => {
                           {index === 0 ? <div className="text-muted small mt-1">Cover photo</div> : null}
                         </div>)}
                     </div> : <div className="text-muted small mb-2">No pictures yet. The brochure will still include the description.</div>}
-                  <Form.Control type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={onImagesChange} isInvalid={Boolean(imageError)} />
+                  <Form.Control type="file" multiple accept={IMAGE_FILE_ACCEPT} onChange={onImagesChange} isInvalid={Boolean(imageError)} />
                   {imageError ? <div className="invalid-feedback d-block">{imageError}</div> : null}
-                  <div className="text-muted small mt-1">JPG, JPEG, PNG, or WebP. Up to 5 MB each and {MAX_IMAGES} pictures. Use Left and Right to set the brochure order. The first picture is the cover.</div>
+                  <div className="text-muted small mt-1">JPG, JPEG, PNG, WebP, HEIC, or HEIF. iPhone photos are converted automatically. Up to 5 MB each after processing, and {MAX_IMAGES} pictures. Use Left and Right to set the brochure order. The first picture is the cover.</div>
                 </Form.Group>
               </Col>
               <Col md={12}>

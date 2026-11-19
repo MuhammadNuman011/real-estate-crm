@@ -7,14 +7,9 @@ const Companies = require("../modals/Comapnies");
 const { hashPassword, authenticateBroker } = require("../helpers/helper");
 const { createBrokerToken } = require("../helpers/token");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
+const { prepareStoredImage } = require("../helpers/imageFile");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/brokers");
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_TYPES = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp"
-};
 const COUNTRY_CODES = ["+966", "+971"];
 
 function trimmed(value) {
@@ -59,20 +54,13 @@ function normalizeMobile(countryCode, localNumber) {
   return { mobile: code + digits };
 }
 
-function saveProfilePicture(dataUrl) {
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
-  if (!match || !IMAGE_TYPES[match[1]]) {
-    return { error: "Profile picture must be a JPG, PNG, or WebP image." };
-  }
-
-  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
-  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
-    return { error: "Profile picture must be under 5 MB." };
-  }
+async function saveProfilePicture(dataUrl) {
+  const prepared = await prepareStoredImage(dataUrl, "Profile picture");
+  if (prepared.error) return prepared;
 
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const filename = crypto.randomBytes(16).toString("hex") + IMAGE_TYPES[match[1]];
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+  const filename = crypto.randomBytes(16).toString("hex") + prepared.extension;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), prepared.buffer);
   return { path: "/uploads/brokers/" + filename };
 }
 
@@ -84,7 +72,7 @@ function removeProfilePicture(storedPath) {
   if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
 }
 
-function resolveProfilePicture(value, currentPath) {
+async function resolveProfilePicture(value, currentPath) {
   if (value == null || value === "") {
     return { path: null, previous: currentPath || null };
   }
@@ -94,7 +82,7 @@ function resolveProfilePicture(value, currentPath) {
 
   const text = value.trim();
   if (text.startsWith("data:")) {
-    const saved = saveProfilePicture(text);
+    const saved = await saveProfilePicture(text);
     if (saved.error) return saved;
     return { path: saved.path, previous: currentPath || null, created: saved.path };
   }
@@ -277,7 +265,7 @@ module.exports = function(app) {
         return res.status(409).json({ error: "Validation failed.", fields: duplicates });
       }
 
-      const picture = resolveProfilePicture(body.profile_picture, null);
+      const picture = await resolveProfilePicture(body.profile_picture, null);
       if (picture.error) {
         return res.status(422).json({
           error: "Validation failed.",
@@ -337,7 +325,7 @@ module.exports = function(app) {
         return res.status(409).json({ error: "Validation failed.", fields: duplicates });
       }
 
-      const picture = resolveProfilePicture(body.profile_picture, broker.profile_picture);
+      const picture = await resolveProfilePicture(body.profile_picture, broker.profile_picture);
       if (picture.error) {
         return res.status(422).json({
           error: "Validation failed.",

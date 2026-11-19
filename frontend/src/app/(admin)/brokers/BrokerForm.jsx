@@ -8,6 +8,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
+import { IMAGE_FILE_ACCEPT, prepareImageFile } from '@/helpers/imageFile';
 import { mediaUrl } from '@/helpers/mediaUrl';
 
 const COUNTRY_CODES = [{
@@ -136,27 +137,18 @@ const BrokerForm = ({ mode }) => {
     };
   }, [id, isEdit, reset]);
 
-  const onPictureChange = event => {
+  const onPictureChange = async event => {
     const file = event.target.files && event.target.files[0];
-    event.target.value = '';
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setPictureError('Profile picture must be a JPG, PNG, or WebP image.');
+    const prepared = await prepareImageFile(file);
+    event.target.value = '';
+    if (prepared.error) {
+      setPictureError(prepared.error);
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setPictureError('Profile picture must be under 5 MB.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      setPictureFile(result);
-      setPicturePreview(result);
-      setPictureError('');
-    };
-    reader.onerror = () => setPictureError('Unable to read the image.');
-    reader.readAsDataURL(file);
+    setPictureFile(prepared.dataUrl);
+    setPicturePreview(prepared.dataUrl);
+    setPictureError('');
   };
 
   const clearPicture = () => {
@@ -287,9 +279,9 @@ const BrokerForm = ({ mode }) => {
                 <Col md={12}>
                   <Form.Group>
                     <Form.Label>Profile picture</Form.Label>
-                    <Form.Control type="file" accept="image/jpeg,image/png,image/webp" onChange={onPictureChange} isInvalid={Boolean(pictureError)} />
+                    <Form.Control type="file" accept={IMAGE_FILE_ACCEPT} onChange={onPictureChange} isInvalid={Boolean(pictureError)} />
                     {pictureError ? <div className="invalid-feedback d-block">{pictureError}</div> : null}
-                    <div className="text-muted small mt-1">JPG, PNG, or WebP from your computer, up to 5 MB.</div>
+                    <div className="text-muted small mt-1">JPG, PNG, WebP, HEIC, or HEIF. iPhone photos are converted automatically, up to 5 MB after processing.</div>
                     {picturePreview ? <div className="mt-2 d-flex align-items-center gap-3">
                         <img src={mediaUrl(picturePreview)} alt="Profile preview" width="72" height="72" style={{ objectFit: 'cover', borderRadius: '4px' }} />
                         <Button type="button" variant="outline-danger" size="sm" onClick={clearPicture}>

@@ -4,15 +4,10 @@ const path = require("path");
 const { Op } = require("sequelize");
 const Owners = require("../modals/Owner");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
+const { prepareStoredImage } = require("../helpers/imageFile");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/owners");
 const STORED_PREFIX = "/uploads/owners/";
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_TYPES = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp"
-};
 const COUNTRY_CODES = ["+966", "+971"];
 
 function trimmed(value) {
@@ -44,20 +39,13 @@ function normalizeMobile(countryCode, localNumber) {
   return { mobile: code + digits };
 }
 
-function saveImage(dataUrl, label) {
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
-  if (!match || !IMAGE_TYPES[match[1]]) {
-    return { error: label + " must be a JPG, PNG, or WebP image." };
-  }
-
-  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
-  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
-    return { error: label + " must be under 5 MB." };
-  }
+async function saveImage(dataUrl, label) {
+  const prepared = await prepareStoredImage(dataUrl, label);
+  if (prepared.error) return prepared;
 
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const filename = crypto.randomBytes(16).toString("hex") + IMAGE_TYPES[match[1]];
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
+  const filename = crypto.randomBytes(16).toString("hex") + prepared.extension;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), prepared.buffer);
   return { path: STORED_PREFIX + filename };
 }
 
@@ -69,7 +57,7 @@ function removeImage(storedPath) {
   if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
 }
 
-function resolveImage(value, currentPath, label) {
+async function resolveImage(value, currentPath, label) {
   if (value == null || value === "") {
     return { error: label + " is required." };
   }
@@ -79,7 +67,7 @@ function resolveImage(value, currentPath, label) {
 
   const text = value.trim();
   if (text.startsWith("data:")) {
-    const saved = saveImage(text, label);
+    const saved = await saveImage(text, label);
     if (saved.error) return saved;
     return { path: saved.path, previous: currentPath || null, created: saved.path };
   }
@@ -181,8 +169,8 @@ module.exports = function(app) {
     try {
       const body = req.body || {};
       const parsed = validateOwner(body);
-      const front = resolveImage(body.national_id_front, null, "National ID front");
-      const back = resolveImage(body.national_id_back, null, "National ID back");
+      const front = await resolveImage(body.national_id_front, null, "National ID front");
+      const back = await resolveImage(body.national_id_back, null, "National ID back");
       if (front.created) created.push(front.created);
       if (back.created) created.push(back.created);
       if (front.error) parsed.errors.national_id_front = front.error;
@@ -227,8 +215,8 @@ module.exports = function(app) {
 
       const body = req.body || {};
       const parsed = validateOwner(body);
-      const front = resolveImage(body.national_id_front, owner.national_id_front, "National ID front");
-      const back = resolveImage(body.national_id_back, owner.national_id_back, "National ID back");
+      const front = await resolveImage(body.national_id_front, owner.national_id_front, "National ID front");
+      const back = await resolveImage(body.national_id_back, owner.national_id_back, "National ID back");
       if (front.created) created.push(front.created);
       if (back.created) created.push(back.created);
       if (front.error) parsed.errors.national_id_front = front.error;

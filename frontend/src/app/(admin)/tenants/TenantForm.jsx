@@ -8,6 +8,7 @@ import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
+import { IMAGE_FILE_ACCEPT, prepareImageFile } from '@/helpers/imageFile';
 import { mediaUrl } from '@/helpers/mediaUrl';
 
 const COUNTRY_CODES = [{
@@ -105,26 +106,6 @@ const defaultValues = {
   status: 'active'
 };
 
-function readPicture(file, setFile, setPreview, setError) {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    setError('Use a JPG, PNG, or WebP image.');
-    return;
-  }
-  if (file.size > 5 * 1024 * 1024) {
-    setError('Image must be under 5 MB.');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const result = typeof reader.result === 'string' ? reader.result : '';
-    setFile(result);
-    setPreview(result);
-    setError('');
-  };
-  reader.onerror = () => setError('Unable to read the image.');
-  reader.readAsDataURL(file);
-}
-
 const TenantForm = ({ mode }) => {
   const isEdit = mode === 'edit';
   const { id } = useParams();
@@ -191,11 +172,18 @@ const TenantForm = ({ mode }) => {
     };
   }, [id, isEdit, reset]);
 
-  const onPictureChange = (event, setFile, setPreview, setErrorMessage) => {
+  const onPictureChange = async (event, setFile, setPreview, setErrorMessage) => {
     const file = event.target.files && event.target.files[0];
-    event.target.value = '';
     if (!file) return;
-    readPicture(file, setFile, setPreview, setErrorMessage);
+    const prepared = await prepareImageFile(file);
+    event.target.value = '';
+    if (prepared.error) {
+      setErrorMessage(prepared.error);
+      return;
+    }
+    setFile(prepared.dataUrl);
+    setPreview(prepared.dataUrl);
+    setErrorMessage('');
   };
 
   const onSubmit = handleSubmit(async values => {
@@ -319,9 +307,9 @@ const TenantForm = ({ mode }) => {
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label>National ID front</Form.Label>
-                    <Form.Control type="file" accept="image/jpeg,image/png,image/webp" onChange={event => onPictureChange(event, setFrontFile, setFrontPreview, setFrontError)} isInvalid={Boolean(frontError)} />
+                    <Form.Control type="file" accept={IMAGE_FILE_ACCEPT} onChange={event => onPictureChange(event, setFrontFile, setFrontPreview, setFrontError)} isInvalid={Boolean(frontError)} />
                     {frontError ? <div className="invalid-feedback d-block">{frontError}</div> : null}
-                    <div className="text-muted small mt-1">JPG, PNG, or WebP, up to 5 MB.</div>
+                    <div className="text-muted small mt-1">JPG, PNG, WebP, HEIC, or HEIF. Large iPhone photos are resized to fit 5 MB.</div>
                     {frontPreview ? <div className="mt-2 d-flex align-items-center gap-3">
                         <img src={mediaUrl(frontPreview)} alt="National ID front preview" width="96" height="64" style={{ objectFit: 'cover', borderRadius: '4px' }} />
                         <Button type="button" variant="outline-danger" size="sm" onClick={() => {
@@ -338,9 +326,9 @@ const TenantForm = ({ mode }) => {
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label>National ID back</Form.Label>
-                    <Form.Control type="file" accept="image/jpeg,image/png,image/webp" onChange={event => onPictureChange(event, setBackFile, setBackPreview, setBackError)} isInvalid={Boolean(backError)} />
+                    <Form.Control type="file" accept={IMAGE_FILE_ACCEPT} onChange={event => onPictureChange(event, setBackFile, setBackPreview, setBackError)} isInvalid={Boolean(backError)} />
                     {backError ? <div className="invalid-feedback d-block">{backError}</div> : null}
-                    <div className="text-muted small mt-1">JPG, PNG, or WebP, up to 5 MB.</div>
+                    <div className="text-muted small mt-1">JPG, PNG, WebP, HEIC, or HEIF. Large iPhone photos are resized to fit 5 MB.</div>
                     {backPreview ? <div className="mt-2 d-flex align-items-center gap-3">
                         <img src={mediaUrl(backPreview)} alt="National ID back preview" width="96" height="64" style={{ objectFit: 'cover', borderRadius: '4px' }} />
                         <Button type="button" variant="outline-danger" size="sm" onClick={() => {
