@@ -647,11 +647,13 @@ async function sendBrochure(req, res, ownerCompanyId) {
   }
 
   const download = req.query.download === "1" || req.query.download === "true";
-  const filename = "property-" + property.id + "-brochure.pdf";
+  const filename = path.basename(filePath);
+  const asciiName = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    (download ? "attachment" : "inline") + "; filename=\"" + filename + "\""
+    (download ? "attachment" : "inline") +
+      "; filename=\"" + asciiName + "\"; filename*=UTF-8''" + encodeURIComponent(filename)
   );
   res.setHeader("Cache-Control", "private, no-store");
   return fs.createReadStream(filePath).pipe(res);

@@ -9,10 +9,33 @@ const BROCHURE_PREFIX = "/storage/brochures/";
 const IMAGE_DIR = path.join(__dirname, "../uploads/properties");
 const IMAGE_PREFIX = "/uploads/properties/";
 
+const LEGACY_BROCHURE_NAME = /^[a-f0-9]{32}\.pdf$/;
+const NAMED_BROCHURE_NAME = /^[^<>:"/\\|?*\u0000-\u001f.][^<>:"/\\|?*\u0000-\u001f]{0,79}_[0-9]{8}\.pdf$/;
+
+function isBrochureFilename(filename) {
+  if (!filename || filename.includes("..")) return false;
+  return LEGACY_BROCHURE_NAME.test(filename) || NAMED_BROCHURE_NAME.test(filename);
+}
+
+function safeCompanyLabel(companyName) {
+  const cleaned = String(companyName || "Company")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^\.+/, "")
+    .trim()
+    .slice(0, 80);
+  return cleaned || "Company";
+}
+
+function brochureFileName(companyName) {
+  const digits = crypto.randomInt(0, 100000000).toString().padStart(8, "0");
+  return safeCompanyLabel(companyName) + "_" + digits + ".pdf";
+}
+
 function resolveBrochureFile(storedPath) {
   if (typeof storedPath !== "string" || !storedPath.startsWith(BROCHURE_PREFIX)) return null;
   const filename = path.basename(storedPath);
-  if (!/^[a-f0-9]{32}\.pdf$/.test(filename)) return null;
+  if (!isBrochureFilename(filename)) return null;
   const fullPath = path.resolve(BROCHURE_DIR, filename);
   const root = path.resolve(BROCHURE_DIR) + path.sep;
   if (!fullPath.startsWith(root)) return null;
@@ -133,7 +156,7 @@ function buildPropertyBrochure(options) {
   const companyName = options.companyName;
   const property = options.property || {};
   const images = options.images || [];
-  const title = String(property.title || "").trim();
+  const documentName = String(options.documentName || "").trim() || safeCompanyLabel(companyName);
   const description = String(property.description || "").trim() || "No description provided.";
 
   return new Promise(function(resolve, reject) {
@@ -142,7 +165,7 @@ function buildPropertyBrochure(options) {
       margins: { top: 72, bottom: 50, left: 40, right: 40 },
       bufferPages: true,
       info: {
-        Title: (title || property.property_type || "Property") + " brochure",
+        Title: documentName,
         Author: String(companyName || "Company").trim() || "Company"
       }
     });
@@ -215,12 +238,6 @@ function buildPropertyBrochure(options) {
       y = doc.page.margins.top;
     }
 
-    if (title) {
-      doc.font("Helvetica-Bold").fontSize(16).fillColor("#1f2933");
-      doc.text(title, left, y, { width: contentWidth });
-      y = doc.y + 10;
-    }
-
     const summary = propertySummary(property);
     if (summary) {
       doc.font("Helvetica").fontSize(10).fillColor("#3d4654");
@@ -252,15 +269,21 @@ async function writePropertyBrochure(options) {
     if (image) loaded.push(image);
   }
 
+  fs.mkdirSync(BROCHURE_DIR, { recursive: true });
+  let filename = brochureFileName(options.companyName);
+  let fullPath = path.join(BROCHURE_DIR, filename);
+  for (let attempt = 0; fs.existsSync(fullPath) && attempt < 5; attempt += 1) {
+    filename = brochureFileName(options.companyName);
+    fullPath = path.join(BROCHURE_DIR, filename);
+  }
+
   const buffer = await buildPropertyBrochure({
     companyName: options.companyName,
+    documentName: filename.slice(0, -4),
     property: options.property,
     images: loaded
   });
 
-  fs.mkdirSync(BROCHURE_DIR, { recursive: true });
-  const filename = crypto.randomBytes(16).toString("hex") + ".pdf";
-  const fullPath = path.join(BROCHURE_DIR, filename);
   fs.writeFileSync(fullPath, buffer);
   return { path: BROCHURE_PREFIX + filename };
 }
