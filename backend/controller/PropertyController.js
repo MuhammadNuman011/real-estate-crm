@@ -18,6 +18,7 @@ const {
   writePropertyBrochure
 } = require("../services/propertyBrochure");
 const { prepareStoredImage, applyCompanyWatermark } = require("../helpers/imageFile");
+const { notifyNewProperty } = require("../services/pushNotification");
 
 const UPLOAD_DIR = path.join(__dirname, "../uploads/properties");
 const STORED_PREFIX = "/uploads/properties/";
@@ -632,6 +633,17 @@ async function writeProperty(req, res, property) {
 
   const payload = await withContract(saved, ownerCompanyId);
   if (pdfWarning) payload.pdf_warning = pdfWarning;
+
+  // Updates reuse this function. Only a newly inserted row notifies subscribers.
+  // A Firebase failure must not change the response after the row is saved.
+  if (!property) {
+    try {
+      await notifyNewProperty(saved);
+    } catch (error) {
+      console.error("New property notification failed:", error);
+    }
+  }
+
   return res.status(property ? 200 : 201).json(payload);
 }
 

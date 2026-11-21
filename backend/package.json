@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test services/pushNotification.test.js"
   },
   "engines": {
     "node": "22.x"
@@ -16,6 +16,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "firebase-admin": "^14.5.1",
     "heic-convert": "^2.1.0",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.4",
