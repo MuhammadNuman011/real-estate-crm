@@ -182,12 +182,8 @@ function buildPropertyBrochure(options) {
     const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const contentBottom = doc.page.height - doc.page.margins.bottom;
     const gap = 14;
-    const columns = images.length > 1 ? 2 : 1;
-    const cellWidth = columns === 1 ? contentWidth : (contentWidth - gap) / 2;
-    const maxHeight = columns === 1 ? 460 : 240;
+    const maxHeight = Math.min(460, contentBottom - doc.page.margins.top);
     let y = doc.page.margins.top;
-    let column = 0;
-    let rowHeight = 0;
 
     function contentBottomNow() {
       return doc.page.height - doc.page.margins.bottom;
@@ -196,32 +192,19 @@ function buildPropertyBrochure(options) {
     function startPage() {
       doc.addPage();
       y = doc.page.margins.top;
-      column = 0;
-      rowHeight = 0;
     }
 
     images.forEach(function(image) {
-      const size = fittedSize(image.width, image.height, cellWidth, maxHeight);
-      const atTop = column === 0 && y <= doc.page.margins.top + 1;
+      const size = fittedSize(image.width, image.height, contentWidth, maxHeight);
+      const atTop = y <= doc.page.margins.top + 1;
       if (!atTop && y + size.height > contentBottomNow()) {
         startPage();
       }
 
-      const x = left + column * (cellWidth + gap) + (cellWidth - size.width) / 2;
+      const x = left + (contentWidth - size.width) / 2;
       doc.image(image.source, x, y, { width: size.width });
-      rowHeight = Math.max(rowHeight, size.height);
-      column += 1;
-
-      if (column === columns) {
-        y += rowHeight + gap;
-        column = 0;
-        rowHeight = 0;
-      }
+      y += size.height + gap;
     });
-
-    if (column !== 0) {
-      y += rowHeight + gap;
-    }
 
     if (!images.length) {
       doc.font("Helvetica-Oblique").fontSize(11).fillColor("#5c6570");
