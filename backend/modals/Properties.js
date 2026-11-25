@@ -112,6 +112,16 @@ module.exports = db.define(
       type: Sequelize.STRING,
       allowNull: false,
     },
+
+    created_by: {
+      type: Sequelize.STRING,
+      allowNull: true,
+    },
+
+    created_by_role: {
+      type: Sequelize.ENUM("company", "broker"),
+      allowNull: true,
+    },
   },
   {
     timestamps: true,

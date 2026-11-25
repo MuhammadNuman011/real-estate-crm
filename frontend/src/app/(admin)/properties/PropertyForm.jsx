@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as yup from 'yup';
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb';
 import PageMetaData from '@/components/PageTitle';
+import { useAuthContext } from '@/context/useAuthContext';
 import { useNotificationContext } from '@/context/useNotificationContext';
 import httpClient from '@/helpers/httpClient';
 import { IMAGE_FILE_ACCEPT, prepareImageFile } from '@/helpers/imageFile';
@@ -190,6 +191,10 @@ const PropertyForm = ({ mode }) => {
   const isEdit = mode === 'edit';
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthContext();
+  const isBroker = user?.role === 'broker';
+  const [featureReady, setFeatureReady] = useState(!isBroker);
+  const [canManageProperties, setCanManageProperties] = useState(!isBroker);
   const [loading, setLoading] = useState(false);
   const [loadingProperty, setLoadingProperty] = useState(isEdit);
   const [propertyTypes, setPropertyTypes] = useState([]);
@@ -227,12 +232,41 @@ const PropertyForm = ({ mode }) => {
   const tenantOptions = withCurrentPerson(tenants, selectedTenantId);
   const typeOptions = selectedType && !propertyTypes.includes(selectedType) ? [selectedType, ...propertyTypes] : propertyTypes;
   const canChooseType = isEdit ? typeOptions.length > 0 : propertyTypes.length > 0;
+  const propertyApi = isBroker ? '/api/broker/properties' : '/api/properties';
+  const waitingForAccess = isBroker && !featureReady;
+  const accessDenied = isBroker && featureReady && !canManageProperties;
 
   useEffect(() => {
+    if (!isBroker) return undefined;
     let active = true;
     (async () => {
       try {
-        const response = await httpClient.get('/api/properties/types');
+        const response = await httpClient.get('/api/broker/features');
+        if (!active) return;
+        setCanManageProperties(Boolean(response.data && response.data.broker_manage_properties));
+      } catch (e) {
+        if (!active) return;
+        setCanManageProperties(false);
+        setError(e.response?.data?.error || 'Unable to load property permissions.');
+      } finally {
+        if (active) setFeatureReady(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isBroker]);
+
+  useEffect(() => {
+    if (isBroker && !featureReady) return undefined;
+    if (isBroker && !canManageProperties) {
+      setPropertyTypesLoading(false);
+      return undefined;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const response = await httpClient.get(propertyApi + '/types');
         if (!active) return;
         const types = Array.isArray(response.data) ? response.data.filter(type => typeof type === 'string' && type.trim()) : [];
         setPropertyTypes(types);
@@ -250,21 +284,35 @@ const PropertyForm = ({ mode }) => {
     return () => {
       active = false;
     };
-  }, [getValues, isEdit, setValue]);
+  }, [canManageProperties, featureReady, getValues, isBroker, isEdit, propertyApi, setValue]);
 
   useEffect(() => {
+    if (isBroker && !featureReady) return undefined;
+    if (isBroker && !canManageProperties) {
+      setPeopleLoading(false);
+      return undefined;
+    }
     let active = true;
     (async () => {
       try {
-        const [brokerResponse, ownerResponse, tenantResponse] = await Promise.all([
-          httpClient.get('/api/brokers'),
-          httpClient.get('/api/owners'),
-          httpClient.get('/api/tenants')
-        ]);
-        if (!active) return;
-        setBrokers(Array.isArray(brokerResponse.data) ? brokerResponse.data : []);
-        setOwners(Array.isArray(ownerResponse.data) ? ownerResponse.data : []);
-        setTenants(Array.isArray(tenantResponse.data) ? tenantResponse.data : []);
+        if (isBroker) {
+          const response = await httpClient.get('/api/broker/property-parties');
+          if (!active) return;
+          const data = response.data || {};
+          setBrokers(Array.isArray(data.brokers) ? data.brokers : []);
+          setOwners(Array.isArray(data.owners) ? data.owners : []);
+          setTenants(Array.isArray(data.tenants) ? data.tenants : []);
+        } else {
+          const [brokerResponse, ownerResponse, tenantResponse] = await Promise.all([
+            httpClient.get('/api/brokers'),
+            httpClient.get('/api/owners'),
+            httpClient.get('/api/tenants')
+          ]);
+          if (!active) return;
+          setBrokers(Array.isArray(brokerResponse.data) ? brokerResponse.data : []);
+          setOwners(Array.isArray(ownerResponse.data) ? ownerResponse.data : []);
+          setTenants(Array.isArray(tenantResponse.data) ? tenantResponse.data : []);
+        }
       } catch (e) {
         if (active) {
           setError(e.response?.data?.error || 'Unable to load brokers, owners, and tenants.');
@@ -276,14 +324,19 @@ const PropertyForm = ({ mode }) => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [canManageProperties, featureReady, isBroker]);
 
   useEffect(() => {
     if (!isEdit) return undefined;
+    if (isBroker && !featureReady) return undefined;
+    if (isBroker && !canManageProperties) {
+      setLoadingProperty(false);
+      return undefined;
+    }
     let active = true;
     (async () => {
       try {
-        const response = await httpClient.get('/api/properties/' + id);
+        const response = await httpClient.get(propertyApi + '/' + id);
         if (!active) return;
         const property = response.data || {};
         reset(toFormValues(property));
@@ -306,7 +359,7 @@ const PropertyForm = ({ mode }) => {
     return () => {
       active = false;
     };
-  }, [id, isEdit, reset]);
+  }, [canManageProperties, featureReady, id, isBroker, isEdit, propertyApi, reset]);
 
   const handleLocationChange = useCallback((nextLat, nextLng) => {
     setValue('lat', nextLat, { shouldValidate: true, shouldDirty: true });
@@ -370,11 +423,15 @@ const PropertyForm = ({ mode }) => {
     setError('');
     setImageError('');
     try {
+      if (isBroker && !canManageProperties) {
+        setError('You do not have access to this module.');
+        return;
+      }
       const payload = propertyPayload(values);
       payload.images = pictures.map(picture => picture.dataUrl || picture.storedPath);
       const response = isEdit
-        ? await httpClient.patch('/api/properties/' + id, payload)
-        : await httpClient.post('/api/properties', payload);
+        ? await httpClient.patch(propertyApi + '/' + id, payload)
+        : await httpClient.post(propertyApi, payload);
       if (response.data?.pdf_warning) {
         showNotification({
           message: (isEdit ? 'Property updated. ' : 'Property added. ') + response.data.pdf_warning,
@@ -417,9 +474,9 @@ const PropertyForm = ({ mode }) => {
             {title}
           </CardTitle>
           {error && <Alert variant="danger">{error}</Alert>}
-          {loadingProperty ? <div className="text-center py-5">
+          {waitingForAccess || loadingProperty ? <div className="text-center py-5">
               <Spinner animation="border" role="status" />
-            </div> : <Form onSubmit={onSubmit} noValidate>
+            </div> : accessDenied ? <Alert variant="warning">You do not have access to this module.</Alert> : <Form onSubmit={onSubmit} noValidate>
             <Row className="g-3">
               <Col md={12}>
                 <Form.Group>

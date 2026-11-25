@@ -3,7 +3,7 @@ import AuthLayout from '@/layouts/AuthLayout';
 import { useAuthContext } from '@/context/useAuthContext';
 import { appRoutes, authRoutes } from '@/routes/index';
 import AdminLayout from '@/layouts/AdminLayout';
-const BROKER_PATHS = ['/properties'];
+const BROKER_PATHS = ['/properties', '/properties/add', '/properties/:id/edit'];
 
 const AppRouter = props => {
   const {

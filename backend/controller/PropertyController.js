@@ -11,6 +11,7 @@ const Companies = require("../modals/Comapnies");
 const db = require("../config/db");
 const requireCompanyAuth = require("../middleware/requireCompanyAuth");
 const requireBrokerAuth = require("../middleware/requireBrokerAuth");
+const requireBrokerPropertyWrite = require("../middleware/requireBrokerPropertyWrite");
 const { Op } = require("sequelize");
 const {
   resolveBrochureFile,
@@ -72,7 +73,8 @@ const LIST_ATTRIBUTES = [
 ];
 
 function companyId(req) {
-  return String(req.company.id);
+  if (req.company) return String(req.company.id);
+  return String(req.broker.company_id || "");
 }
 
 function propertyListWhere(req, baseWhere) {
@@ -610,7 +612,9 @@ async function writeProperty(req, res, property) {
         await record.update(values, { transaction: transaction });
       } else {
         record = await Properties.create(Object.assign({}, values, {
-          company_id: ownerCompanyId
+          company_id: ownerCompanyId,
+          created_by: req.broker ? String(req.broker.id) : String(req.company.id),
+          created_by_role: req.broker ? "broker" : "company"
         }), { transaction: transaction });
       }
       await saveContract(record.id, ownerCompanyId, contract.values, transaction);
@@ -684,6 +688,62 @@ module.exports = function(app) {
     }
   });
 
+  app.get("/api/broker/properties/types", requireBrokerPropertyWrite, async function(req, res) {
+    try {
+      const rows = await Properties.findAll({
+        attributes: ["property_type"],
+        where: {
+          property_type: { [Op.ne]: "" }
+        },
+        group: ["property_type"],
+        order: [["property_type", "ASC"]],
+        raw: true
+      });
+      const propertyTypes = rows
+        .map(function(row) {
+          return trimmed(row.property_type);
+        })
+        .filter(Boolean);
+
+      return res.status(200).json(propertyTypes);
+    } catch (error) {
+      console.error("Get broker property types failed:", error);
+      return res.status(500).json({ error: "Unable to retrieve property types." });
+    }
+  });
+
+  app.get("/api/broker/property-parties", requireBrokerPropertyWrite, async function(req, res) {
+    try {
+      const ownerCompanyId = companyId(req);
+      const partyAttributes = ["id", "name", "mobile"];
+      const [brokers, owners, tenants] = await Promise.all([
+        Brokers.findAll({
+          where: { company_id: ownerCompanyId },
+          attributes: partyAttributes,
+          order: [["name", "ASC"]]
+        }),
+        Owners.findAll({
+          where: { company_id: ownerCompanyId },
+          attributes: partyAttributes,
+          order: [["name", "ASC"]]
+        }),
+        Tenants.findAll({
+          where: { company_id: ownerCompanyId },
+          attributes: partyAttributes,
+          order: [["name", "ASC"]]
+        })
+      ]);
+      return res.status(200).json({
+        brokers: brokers,
+        owners: owners,
+        tenants: tenants
+      });
+    } catch (error) {
+      console.error("Get broker property parties failed:", error);
+      return res.status(500).json({ error: "Unable to load brokers, owners, and tenants." });
+    }
+  });
+
   app.get("/api/broker/properties", requireBrokerAuth, async function(req, res) {
     try {
       const filter = propertyListWhere(req, {
@@ -733,6 +793,43 @@ module.exports = function(app) {
     } catch (error) {
       console.error("Open property brochure failed:", error);
       return res.status(500).json({ error: "Unable to open the brochure." });
+    }
+  });
+
+  app.get("/api/broker/properties/:id", requireBrokerPropertyWrite, async function(req, res) {
+    try {
+      const ownerCompanyId = companyId(req);
+      const property = await ownedByCompany(req.params.id, ownerCompanyId);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found." });
+      }
+      return res.status(200).json(await withContract(property, ownerCompanyId));
+    } catch (error) {
+      console.error("Get broker property failed:", error);
+      return res.status(500).json({ error: "Unable to retrieve property." });
+    }
+  });
+
+  app.post("/api/broker/properties", requireBrokerPropertyWrite, async function(req, res) {
+    try {
+      return await writeProperty(req, res, null);
+    } catch (error) {
+      console.error("Create broker property failed:", error);
+      return res.status(400).json({ error: "Unable to create property." });
+    }
+  });
+
+  app.patch("/api/broker/properties/:id", requireBrokerPropertyWrite, async function(req, res) {
+    try {
+      const property = await ownedByCompany(req.params.id, companyId(req));
+      if (!property) {
+        return res.status(404).json({ error: "Property not found." });
+      }
+
+      return await writeProperty(req, res, property);
+    } catch (error) {
+      console.error("Update broker property failed:", error);
+      return res.status(400).json({ error: "Unable to update property." });
     }
   });
 

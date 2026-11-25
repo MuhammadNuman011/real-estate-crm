@@ -53,6 +53,8 @@ if (fs.existsSync(frontendIndex)) {
 
 const Properties = require("./modals/Properties");
 require("./modals/PropertyImage");
+require("./modals/Feature");
+const { ensureDefaultFeatures } = require("./helpers/features");
 
 function ensurePropertyTitleColumn() {
   const table = Properties.getTableName();
@@ -85,6 +87,25 @@ function ensurePropertyBrochureColumns() {
   });
 }
 
+function ensurePropertyCreatorColumns() {
+  const table = Properties.getTableName();
+  const tableName = typeof table === "string" ? table : table.tableName;
+  return db.query("SHOW COLUMNS FROM `" + tableName + "`").then(function(result) {
+    const names = result[0].map(function(column) {
+      return column.Field;
+    });
+    const statements = [];
+    if (names.indexOf("created_by") === -1) {
+      statements.push("ADD COLUMN `created_by` VARCHAR(255) NULL");
+    }
+    if (names.indexOf("created_by_role") === -1) {
+      statements.push("ADD COLUMN `created_by_role` ENUM('company', 'broker') NULL");
+    }
+    if (!statements.length) return null;
+    return db.query("ALTER TABLE `" + tableName + "` " + statements.join(", "));
+  });
+}
+
 function ensureContractTenantColumn() {
   return db.query("SHOW COLUMNS FROM `property_contracts` LIKE 'tenant_id'").then(function(result) {
     const column = result[0][0];
@@ -110,7 +131,7 @@ db.sync().then(function() {
   ).catch(function(err) {
     console.log("Unable to update property status values.");
     console.log(err);
-  }).then(ensureContractTenantColumn).then(ensurePropertyTitleColumn).then(ensurePropertyImageColumn).then(ensurePropertyBrochureColumns);
+  }).then(ensureContractTenantColumn).then(ensurePropertyTitleColumn).then(ensurePropertyImageColumn).then(ensurePropertyBrochureColumns).then(ensurePropertyCreatorColumns).then(ensureDefaultFeatures);
 }).catch(function(err) {
   console.log("Unable to prepare property tables.");
   console.log(err);

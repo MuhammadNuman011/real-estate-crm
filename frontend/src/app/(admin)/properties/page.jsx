@@ -61,7 +61,7 @@ const listColumns = [{
   formatter: cell => statusBadge(cell)
 }];
 
-function actionColumn(isBroker, openBrochure) {
+function actionColumn(canEdit, openBrochure) {
   return {
     id: 'actions',
     name: 'Actions',
@@ -70,7 +70,7 @@ function actionColumn(isBroker, openBrochure) {
       const propertyId = cell && cell.id;
       const hasPdf = Boolean(cell && cell.hasPdf);
       const buttons = [];
-      if (!isBroker) {
+      if (canEdit) {
         buttons.push(h('a', {
           href: '/properties/' + propertyId + '/edit',
           className: 'btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center',
@@ -123,6 +123,8 @@ function toRow(property) {
 const PropertiesPage = () => {
   const { user } = useAuthContext();
   const isBroker = user?.role === 'broker';
+  const [brokerCanManage, setBrokerCanManage] = useState(false);
+  const canManageProperties = !isBroker || brokerCanManage;
   const [properties, setProperties] = useState(null);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({
@@ -164,7 +166,24 @@ const PropertiesPage = () => {
       setPdfMessage('');
     }
   }, [isBroker]);
-  const columns = useMemo(() => listColumns.concat(actionColumn(isBroker, openBrochure)), [isBroker, openBrochure]);
+  const columns = useMemo(() => listColumns.concat(actionColumn(canManageProperties, openBrochure)), [canManageProperties, openBrochure]);
+
+  useEffect(() => {
+    if (!isBroker) return undefined;
+    let active = true;
+    (async () => {
+      try {
+        const response = await httpClient.get('/api/broker/features');
+        if (!active) return;
+        setBrokerCanManage(Boolean(response.data && response.data.broker_manage_properties));
+      } catch (e) {
+        if (active) setBrokerCanManage(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isBroker]);
 
   useEffect(() => {
     let active = true;
@@ -221,7 +240,7 @@ const PropertiesPage = () => {
             <CardTitle as="h5" className="mb-0">
               Properties
             </CardTitle>
-            {!isBroker && <Button as={Link} to="/properties/add">
+            {canManageProperties && <Button as={Link} to="/properties/add">
               Add property
             </Button>}
           </div>
@@ -250,7 +269,7 @@ const PropertiesPage = () => {
             </div>}
           {properties === null ? <div className="text-center py-5">
               <Spinner animation="border" role="status" />
-            </div> : <Grid columns={columns} data={properties} className={{
+            </div> : <Grid key={canManageProperties ? 'manage' : 'view'} columns={columns} data={properties} className={{
           table: 'table table-sm'
         }} sort fixedHeader height="420px" pagination={{
           limit: 10
