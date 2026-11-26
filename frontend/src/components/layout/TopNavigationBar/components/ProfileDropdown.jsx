@@ -3,6 +3,7 @@ import { Dropdown, DropdownDivider, DropdownHeader, DropdownItem, DropdownMenu, 
 import IconifyIcon from '@/components/wrappers/IconifyIcon';
 import avatar1 from '@/assets/images/users/avatar-1.jpg';
 import { useAuthContext } from '@/context/useAuthContext';
+import { mediaUrl } from '@/helpers/mediaUrl';
 const ProfileDropdown = () => {
   const {
     removeSession,
@@ -10,18 +11,19 @@ const ProfileDropdown = () => {
   } = useAuthContext();
   const isBroker = user?.role === 'broker';
   const displayName = user?.broker?.name || user?.company?.name || user?.company?.adminid || user?.name || user?.adminid || 'there';
+  const companyLogo = !isBroker && user?.company?.logo ? mediaUrl(user.company.logo) : '';
   return <Dropdown className="topbar-item" align={'end'}>
       <DropdownToggle as="button" type="button" className="topbar-button content-none" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
         <span className="d-flex align-items-center">
-          <img className="rounded-circle" width={32} height={32} src={avatar1} alt="avatar" />
+          <img className="rounded-circle" width={32} height={32} src={companyLogo || avatar1} alt="avatar" style={{ objectFit: 'cover' }} />
         </span>
       </DropdownToggle>
       <DropdownMenu>
         <DropdownHeader as="h6">Welcome {displayName}!</DropdownHeader>
         {!isBroker && <>
-          <DropdownItem as={Link} to="/pages/profile">
+          <DropdownItem as={Link} to="/company/profile">
             <IconifyIcon icon="bx:user-circle" className="text-muted fs-18 align-middle me-1" />
-            <span className="align-middle">Profile</span>
+            <span className="align-middle">Company profile</span>
           </DropdownItem>
           <DropdownItem as={Link} to="/apps/chat">
             <IconifyIcon icon="bx:message-dots" className="text-muted fs-18 align-middle me-1" />

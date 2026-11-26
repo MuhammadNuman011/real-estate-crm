@@ -6,6 +6,7 @@ const Analytics = lazy(() => import('@/app/(admin)/dashboard/analytics/page'));
 const Finance = lazy(() => import('@/app/(admin)/dashboard/finance/page'));
 const Sales = lazy(() => import('@/app/(admin)/dashboard/sales/page'));
 const Companies = lazy(() => import('@/app/(admin)/companies/page'));
+const CompanyProfile = lazy(() => import('@/app/(admin)/company/profile/page'));
 const Properties = lazy(() => import('@/app/(admin)/properties/page'));
 const AddProperty = lazy(() => import('@/app/(admin)/properties/add/page'));
 const EditProperty = lazy(() => import('@/app/(admin)/properties/[id]/edit/page'));
@@ -164,6 +165,10 @@ const generalRoutes = [{
   path: '/companies',
   name: 'Companies',
   element: <Companies />
+}, {
+  path: '/company/profile',
+  name: 'Company profile',
+  element: <CompanyProfile />
 }, {
   path: '/properties',
   name: 'Properties',

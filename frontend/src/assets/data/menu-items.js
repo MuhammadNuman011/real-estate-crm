@@ -53,6 +53,12 @@ export const MENU_ITEMS = [{
   icon: 'iconamoon:profile-circle-duotone',
   label: 'Tenants',
   url: '/tenants'
+},
+{
+  key: 'company-profile',
+  icon: 'iconamoon:profile-circle-duotone',
+  label: 'Company profile',
+  url: '/company/profile'
 }, 
 // {
 //   key: 'apps',

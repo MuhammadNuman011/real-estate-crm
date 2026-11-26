@@ -30,6 +30,10 @@ module.exports = db.define("Comapnies", {
     allowNull: false
   },
   mobile: Sequelize.STRING,
+  logo: {
+    type: Sequelize.STRING,
+    allowNull: true
+  },
   status: {
     type: Sequelize.ENUM("inactive", "active"),
     allowNull: false,
