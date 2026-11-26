@@ -3,11 +3,14 @@ const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit");
 const sharp = require("sharp");
+const { prepareLogoMark, compositeLogoMark } = require("../helpers/imageFile");
 
 const BROCHURE_DIR = path.join(__dirname, "../storage/brochures");
 const BROCHURE_PREFIX = "/storage/brochures/";
 const IMAGE_DIR = path.join(__dirname, "../uploads/properties");
 const IMAGE_PREFIX = "/uploads/properties/";
+const LOGO_DIR = path.join(__dirname, "../uploads/companies");
+const LOGO_PREFIX = "/uploads/companies/";
 
 const LEGACY_BROCHURE_NAME = /^[a-f0-9]{32}\.pdf$/;
 const NAMED_BROCHURE_NAME = /^[^<>:"/\\|?*\u0000-\u001f.][^<>:"/\\|?*\u0000-\u001f]{0,79}_[0-9]{8}\.pdf$/;
@@ -60,6 +63,45 @@ function resolvePropertyUpload(storedPath) {
   const root = path.resolve(IMAGE_DIR) + path.sep;
   if (!fullPath.startsWith(root)) return null;
   return fullPath;
+}
+
+function resolveCompanyLogo(storedPath) {
+  if (typeof storedPath !== "string" || !storedPath.startsWith(LOGO_PREFIX)) return null;
+  const filename = path.basename(storedPath);
+  if (!/^[a-f0-9]{32}\.(jpg|png|webp)$/.test(filename)) return null;
+  const fullPath = path.resolve(LOGO_DIR, filename);
+  const root = path.resolve(LOGO_DIR) + path.sep;
+  if (!fullPath.startsWith(root)) return null;
+  return fullPath;
+}
+
+async function loadLogoMark(storedPath) {
+  const fullPath = resolveCompanyLogo(storedPath);
+  if (!fullPath || !fs.existsSync(fullPath)) return null;
+
+  try {
+    return await prepareLogoMark(fs.readFileSync(fullPath));
+  } catch (error) {
+    console.error("Company logo could not be read for the brochure:", error);
+    return null;
+  }
+}
+
+async function withLogoMark(image, logoMark) {
+  if (!logoMark) return image;
+
+  try {
+    const marked = await compositeLogoMark(image.source, logoMark);
+    if (!marked || !marked.width || !marked.height) return image;
+    return {
+      source: marked.buffer,
+      width: marked.width,
+      height: marked.height
+    };
+  } catch (error) {
+    console.error("Property picture logo watermark failed:", error);
+    return image;
+  }
 }
 
 async function loadImageForPdf(storedPath) {
@@ -247,10 +289,11 @@ async function writePropertyBrochure(options) {
   const loaded = [];
   const sourcePaths = Array.isArray(options.imagePaths) ? options.imagePaths : [];
   const brochurePaths = sourcePaths.slice(1);
+  const logoMark = await loadLogoMark(options.logoPath);
 
   for (let index = 0; index < brochurePaths.length; index += 1) {
     const image = await loadImageForPdf(brochurePaths[index]);
-    if (image) loaded.push(image);
+    if (image) loaded.push(await withLogoMark(image, logoMark));
   }
 
   fs.mkdirSync(BROCHURE_DIR, { recursive: true });

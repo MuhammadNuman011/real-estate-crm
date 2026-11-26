@@ -3,7 +3,8 @@ const convertHeif = require("heic-convert");
 
 const MAX_STORED_BYTES = 5 * 1024 * 1024;
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
-const WATERMARK_MARKER = "crm-property-watermark";
+const LOGO_MARK_OPACITY = 0.4;
+const LOGO_MARK_FRACTION = 0.36;
 
 const CLAIMED_TYPES = {
   "image/jpeg": "jpeg",
@@ -112,103 +113,96 @@ async function compressToLimit(buffer, maxBytes) {
   return null;
 }
 
-function escapeXml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function logoTileSize(imageWidth, imageHeight, logoWidth, logoHeight) {
+  const scale = Math.min(
+    (imageWidth * LOGO_MARK_FRACTION) / logoWidth,
+    (imageHeight * LOGO_MARK_FRACTION) / logoHeight
+  );
+  const width = Math.min(imageWidth, Math.max(1, Math.round(logoWidth * scale)));
+  const height = Math.min(imageHeight, Math.max(1, Math.round(logoHeight * scale)));
+  return {
+    width: width,
+    height: height,
+    left: Math.round((imageWidth - width) / 2),
+    top: Math.round((imageHeight - height) / 2)
+  };
 }
 
-function hasWatermarkMarker(metadata) {
-  const marker = Buffer.from(WATERMARK_MARKER);
-  if (metadata.exif && Buffer.isBuffer(metadata.exif) && metadata.exif.includes(marker)) return true;
-  if (metadata.xmp && Buffer.isBuffer(metadata.xmp) && metadata.xmp.includes(marker)) return true;
-  if (!Array.isArray(metadata.comments)) return false;
-  return metadata.comments.some(function(comment) {
-    return String(comment).indexOf(WATERMARK_MARKER) !== -1;
-  });
+async function prepareLogoMark(buffer) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) return null;
+
+  try {
+    const decoded = await sharp(buffer, { failOn: "none" })
+      .rotate()
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const width = decoded.info.width || 0;
+    const height = decoded.info.height || 0;
+    if (!width || !height || decoded.info.channels !== 4) return null;
+
+    const pixels = Buffer.from(decoded.data);
+    for (let index = 3; index < pixels.length; index += 4) {
+      pixels[index] = Math.round(pixels[index] * LOGO_MARK_OPACITY);
+    }
+
+    const png = await sharp(pixels, {
+      raw: { width: width, height: height, channels: 4 }
+    }).png().toBuffer();
+
+    return {
+      buffer: png,
+      width: width,
+      height: height,
+      sized: new Map()
+    };
+  } catch (error) {
+    console.error("Company logo could not be prepared:", error);
+    return null;
+  }
 }
 
-async function applyCompanyWatermark(buffer, companyName) {
-  const label = String(companyName || "").replace(/\s+/g, " ").trim();
-  if (!label) return { buffer: buffer };
+async function logoTile(logoMark, size) {
+  const key = size.width + "x" + size.height;
+  const cached = logoMark.sized.get(key);
+  if (cached) return cached;
 
-  const metadata = await sharp(buffer, { failOn: "none" }).metadata();
-  if (hasWatermarkMarker(metadata)) return { buffer: buffer };
+  const tile = await sharp(logoMark.buffer)
+    .resize({ width: size.width, height: size.height, fit: "fill" })
+    .png()
+    .toBuffer();
+  logoMark.sized.set(key, tile);
+  return tile;
+}
 
+async function compositeLogoMark(imageBuffer, logoMark) {
+  if (!logoMark || !logoMark.buffer || !logoMark.width || !logoMark.height) return null;
+
+  const metadata = await sharp(imageBuffer, { failOn: "none" }).metadata();
   const width = metadata.width || 0;
   const height = metadata.height || 0;
-  if (!width || !height) {
-    throw new Error("Image dimensions are unavailable.");
-  }
+  if (!width || !height) return null;
 
-  const fontSize = Math.max(24, Math.min(120, Math.round(Math.min(width, height) * 0.08)));
-  const pad = Math.max(10, Math.round(fontSize * 0.7));
-  const maxChars = Math.max(4, Math.floor(Math.max(fontSize, width - pad * 2) / (fontSize * 0.55)));
-  let text = label;
-  if (text.length > maxChars) {
-    text = text.slice(0, Math.max(1, maxChars - 3)) + "...";
-  }
+  const size = logoTileSize(width, height, logoMark.width, logoMark.height);
+  const tile = await logoTile(logoMark, size);
+  let pipeline = sharp(imageBuffer, { failOn: "none" }).composite([{
+    input: tile,
+    left: size.left,
+    top: size.top
+  }]);
 
-  const svgWidth = Math.min(width, Math.ceil(text.length * fontSize * 0.62) + pad * 2);
-  const svgHeight = Math.min(height, Math.ceil(fontSize * 1.5) + pad);
-  const textX = Math.round(svgWidth / 2);
-  const textY = Math.round(svgHeight / 2 + fontSize * 0.35);
-  const svg = Buffer.from(
-    "<svg width=\"" + svgWidth + "\" height=\"" + svgHeight + "\" xmlns=\"http://www.w3.org/2000/svg\">" +
-      "<text x=\"" + textX + "\" y=\"" + textY + "\" text-anchor=\"middle\" " +
-      "font-family=\"Arial, Helvetica, sans-serif\" font-size=\"" + fontSize + "\" font-weight=\"600\" " +
-      "fill=\"rgba(255,255,255,0.58)\" stroke=\"rgba(0,0,0,0.38)\" stroke-width=\"" + Math.max(1, Math.round(fontSize / 16)) + "\" " +
-      "paint-order=\"stroke\">" + escapeXml(text) + "</text></svg>"
-  );
-
-  let pipeline = sharp(buffer, { failOn: "none" })
-    .composite([{
-      input: svg,
-      left: Math.round((width - svgWidth) / 2),
-      top: Math.round((height - svgHeight) / 2)
-    }])
-    .withMetadata({
-      exif: {
-        IFD0: {
-          ImageDescription: WATERMARK_MARKER
-        }
-      }
-    });
-
-  const format = metadata.format;
-  if (format === "png") {
+  if (metadata.format === "png") {
     pipeline = pipeline.png();
-  } else if (format === "webp") {
-    pipeline = pipeline.webp({ quality: 92 });
   } else {
-    pipeline = pipeline.jpeg({ quality: 92, mozjpeg: true });
+    pipeline = pipeline.jpeg({ quality: 90, mozjpeg: true });
   }
 
-  let output = await pipeline.toBuffer();
-  let extension = EXTENSIONS[format] || EXTENSIONS.jpeg;
-
-  if (output.length > MAX_STORED_BYTES) {
-    const fitted = await compressToLimit(output, MAX_STORED_BYTES);
-    if (!fitted) {
-      throw new Error("Watermarked image exceeds the stored size limit.");
-    }
-    output = await sharp(fitted, { failOn: "none" })
-      .withMetadata({
-        exif: {
-          IFD0: {
-            ImageDescription: WATERMARK_MARKER
-          }
-        }
-      })
-      .jpeg({ quality: 90, mozjpeg: true })
-      .toBuffer();
-    extension = EXTENSIONS.jpeg;
-  }
-
-  return { buffer: output, extension: extension };
+  const output = await pipeline.toBuffer({ resolveWithObject: true });
+  return {
+    buffer: output.data,
+    width: output.info.width || width,
+    height: output.info.height || height
+  };
 }
 
 async function prepareStoredImage(dataUrl, label) {
@@ -270,6 +264,9 @@ async function prepareStoredImage(dataUrl, label) {
 module.exports = {
   MAX_STORED_BYTES: MAX_STORED_BYTES,
   MAX_SOURCE_BYTES: MAX_SOURCE_BYTES,
+  LOGO_MARK_OPACITY: LOGO_MARK_OPACITY,
+  LOGO_MARK_FRACTION: LOGO_MARK_FRACTION,
   prepareStoredImage: prepareStoredImage,
-  applyCompanyWatermark: applyCompanyWatermark
+  prepareLogoMark: prepareLogoMark,
+  compositeLogoMark: compositeLogoMark
 };
