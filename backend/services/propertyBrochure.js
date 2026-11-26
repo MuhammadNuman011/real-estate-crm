@@ -167,33 +167,6 @@ function propertySummary(property) {
   return parts.join("   ·   ");
 }
 
-function paintHeaders(doc, companyName) {
-  const range = doc.bufferedPageRange();
-  const label = String(companyName || "Company").trim() || "Company";
-
-  for (let index = 0; index < range.count; index += 1) {
-    doc.switchToPage(range.start + index);
-    const previousTop = doc.page.margins.top;
-    doc.page.margins.top = 0;
-    doc.save();
-    doc.fillColor("#1f2933").font("Helvetica-Bold").fontSize(13);
-    doc.text(label, 40, 26, {
-      width: doc.page.width - 80,
-      align: "center",
-      lineBreak: false,
-      ellipsis: true,
-      height: 18
-    });
-    doc.moveTo(40, 50)
-      .lineTo(doc.page.width - 40, 50)
-      .strokeColor("#c5c9d1")
-      .lineWidth(0.8)
-      .stroke();
-    doc.restore();
-    doc.page.margins.top = previousTop;
-  }
-}
-
 function buildPropertyBrochure(options) {
   const companyName = options.companyName;
   const property = options.property || {};
@@ -204,8 +177,7 @@ function buildPropertyBrochure(options) {
   return new Promise(function(resolve, reject) {
     const doc = new PDFDocument({
       size: "A4",
-      margins: { top: 72, bottom: 50, left: 40, right: 40 },
-      bufferPages: true,
+      margins: { top: 40, bottom: 50, left: 40, right: 40 },
       info: {
         Title: documentName,
         Author: String(companyName || "Company").trim() || "Company"
@@ -280,7 +252,6 @@ function buildPropertyBrochure(options) {
       lineGap: 3
     });
 
-    paintHeaders(doc, companyName);
     doc.end();
   });
 }
