@@ -246,9 +246,10 @@ function buildPropertyBrochure(options) {
 async function writePropertyBrochure(options) {
   const loaded = [];
   const sourcePaths = Array.isArray(options.imagePaths) ? options.imagePaths : [];
+  const brochurePaths = sourcePaths.slice(1);
 
-  for (let index = 0; index < sourcePaths.length; index += 1) {
-    const image = await loadImageForPdf(sourcePaths[index]);
+  for (let index = 0; index < brochurePaths.length; index += 1) {
+    const image = await loadImageForPdf(brochurePaths[index]);
     if (image) loaded.push(image);
   }
 
