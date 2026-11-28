@@ -111,6 +111,61 @@ test("jpg and webp logos are converted before they are stamped", async function(
   assert.equal(fromWebp.width / fromWebp.height, 16 / 24);
 });
 
+function pageBoxes(pdf) {
+  const text = pdf.toString("latin1");
+  const pages = text.match(/\/Type \/Page(?!s)/g) || [];
+  const boxes = [];
+  const pattern = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/g;
+  let match = pattern.exec(text);
+  while (match) {
+    boxes.push({ width: Number(match[1]), height: Number(match[2]) });
+    match = pattern.exec(text);
+  }
+  return { count: pages.length, boxes: boxes };
+}
+
+test("a long brochure stays on one page with a dynamic height", async function() {
+  const source = await sharp({
+    create: { width: 400, height: 800, channels: 3, background: { r: 30, g: 80, b: 140 } }
+  }).jpeg().toBuffer();
+  const images = [0, 1, 2].map(function() {
+    return { source: source, width: 400, height: 800 };
+  });
+  const description = new Array(30).fill("A bright apartment with a long description line.").join(" ");
+  const pdf = await buildPropertyBrochure({
+    companyName: "North Realty",
+    property: {
+      description: description,
+      property_type: "Villa",
+      rent_sale: "sale",
+      price: 250000,
+      bedrooms: 4,
+      bathrooms: 3,
+      area: 2200,
+      area_unit: "sqft"
+    },
+    images: images
+  });
+  const pages = pageBoxes(pdf);
+  assert.equal(pages.count, 1);
+  assert.equal(pages.boxes.length, 1);
+  assert.equal(pages.boxes[0].width, 595.28);
+  assert.ok(pages.boxes[0].height > 841.89);
+});
+
+test("a short brochure uses one page shorter than A4", async function() {
+  const pdf = await buildPropertyBrochure({
+    companyName: "North Realty",
+    property: { description: "Short note." },
+    images: []
+  });
+  const pages = pageBoxes(pdf);
+  assert.equal(pages.count, 1);
+  assert.equal(pages.boxes[0].width, 595.28);
+  assert.ok(pages.boxes[0].height < 841.89);
+  assert.ok(pages.boxes[0].height > 80);
+});
+
 test("a missing or unreadable logo does not block the brochure", async function() {
   assert.equal(await prepareLogoMark(Buffer.alloc(0)), null);
   assert.equal(await prepareLogoMark(Buffer.from("not-an-image")), null);
@@ -192,16 +247,32 @@ test("brochure pdf embeds the logo on each included property picture", async fun
     const text = pdf.toString("latin1");
     assert.equal(pdf.slice(0, 5).toString(), "%PDF-");
     assert.match(text, /North Realty/);
+    assert.match(text, /\/Width 80/);
+    assert.match(text, /\/Height 60/);
     assert.match(text, /\/Width 320/);
     assert.match(text, /\/Height 180/);
     assert.match(text, /\/Width 180/);
     assert.match(text, /\/Height 320/);
     assert.equal(pdf.equals(plainPdf), false);
 
-    const start = pdf.indexOf(Buffer.from([0xff, 0xd8]));
-    const end = pdf.indexOf(Buffer.from([0xff, 0xd9]), start);
-    const embedded = await pixel(pdf.slice(start, end + 2), 160, 90);
-    const outside = await pixel(pdf.slice(start, end + 2), 4, 4);
+    const jpegs = [];
+    let from = 0;
+    while (from < pdf.length) {
+      const start = pdf.indexOf(Buffer.from([0xff, 0xd8]), from);
+      if (start < 0) break;
+      const end = pdf.indexOf(Buffer.from([0xff, 0xd9]), start);
+      if (end < 0) break;
+      jpegs.push(pdf.slice(start, end + 2));
+      from = end + 2;
+    }
+    let wideJpeg = null;
+    for (let index = 0; index < jpegs.length; index += 1) {
+      const info = await sharp(jpegs[index]).metadata();
+      if (info.width === 320 && info.height === 180) wideJpeg = jpegs[index];
+    }
+    assert.ok(wideJpeg);
+    const embedded = await pixel(wideJpeg, 160, 90);
+    const outside = await pixel(wideJpeg, 4, 4);
     assert.ok(embedded[1] > outside[1] + 40, "logo should lighten the center of the picture");
     assert.ok(outside[0] > outside[1]);
   } finally {

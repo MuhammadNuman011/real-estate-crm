@@ -133,12 +133,52 @@ async function loadImageForPdf(storedPath) {
   }
 }
 
-function fittedSize(width, height, maxWidth, maxHeight) {
-  const scale = Math.min(maxWidth / width, maxHeight / height);
+const PAGE_WIDTH = 595.28;
+const MARGIN_TOP = 40;
+const MARGIN_BOTTOM = 50;
+const MARGIN_X = 40;
+const IMAGE_GAP = 14;
+
+function contentWidth() {
+  return PAGE_WIDTH - MARGIN_X - MARGIN_X;
+}
+
+function imagePlacement(image) {
+  const available = contentWidth();
+  const scale = available / image.width;
   return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale))
+    width: available,
+    height: Math.max(1, image.height * scale)
   };
+}
+
+function layoutHeight(doc, images, property) {
+  const width = contentWidth();
+  const description = String(property.description || "").trim() || "No description provided.";
+  let y = MARGIN_TOP;
+
+  images.forEach(function(image) {
+    y += imagePlacement(image).height + IMAGE_GAP;
+  });
+
+  if (!images.length) {
+    doc.font("Helvetica-Oblique").fontSize(11);
+    y += doc.heightOfString("No pictures have been uploaded for this property.", { width: width }) + 16;
+  } else {
+    y += 8;
+  }
+
+  const summary = propertySummary(property);
+  if (summary) {
+    doc.font("Helvetica").fontSize(10);
+    y += doc.heightOfString(summary, { width: width }) + 12;
+  }
+
+  doc.font("Helvetica-Bold").fontSize(13);
+  y += doc.heightOfString("Description", { width: width }) + 8;
+  doc.font("Helvetica").fontSize(11);
+  y += doc.heightOfString(description, { width: width, lineGap: 3 });
+  return y + MARGIN_BOTTOM;
 }
 
 function formatAmount(value) {
@@ -174,10 +214,16 @@ function buildPropertyBrochure(options) {
   const documentName = String(options.documentName || "").trim() || safeCompanyLabel(companyName);
   const description = String(property.description || "").trim() || "No description provided.";
 
+  const margins = { top: MARGIN_TOP, bottom: MARGIN_BOTTOM, left: MARGIN_X, right: MARGIN_X };
+  const probe = new PDFDocument({ size: [PAGE_WIDTH, 200], margins: margins });
+  probe.on("data", function() {});
+  const pageHeight = layoutHeight(probe, images, property);
+  probe.end();
+
   return new Promise(function(resolve, reject) {
     const doc = new PDFDocument({
-      size: "A4",
-      margins: { top: 40, bottom: 50, left: 40, right: 40 },
+      size: [PAGE_WIDTH, pageHeight],
+      margins: margins,
       info: {
         Title: documentName,
         Author: String(companyName || "Company").trim() || "Company"
@@ -193,61 +239,38 @@ function buildPropertyBrochure(options) {
     });
 
     const left = doc.page.margins.left;
-    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const contentBottom = doc.page.height - doc.page.margins.bottom;
-    const gap = 14;
-    const maxHeight = Math.min(460, contentBottom - doc.page.margins.top);
+    const columnWidth = contentWidth();
     let y = doc.page.margins.top;
 
-    function contentBottomNow() {
-      return doc.page.height - doc.page.margins.bottom;
-    }
-
-    function startPage() {
-      doc.addPage();
-      y = doc.page.margins.top;
-    }
-
     images.forEach(function(image) {
-      const size = fittedSize(image.width, image.height, contentWidth, maxHeight);
-      const atTop = y <= doc.page.margins.top + 1;
-      if (!atTop && y + size.height > contentBottomNow()) {
-        startPage();
-      }
-
-      const x = left + (contentWidth - size.width) / 2;
-      doc.image(image.source, x, y, { width: size.width });
-      y += size.height + gap;
+      const size = imagePlacement(image);
+      doc.image(image.source, left, y, { width: size.width, height: size.height });
+      y += size.height + IMAGE_GAP;
     });
 
     if (!images.length) {
       doc.font("Helvetica-Oblique").fontSize(11).fillColor("#5c6570");
       doc.text("No pictures have been uploaded for this property.", left, y, {
-        width: contentWidth
+        width: columnWidth
       });
       y = doc.y + 16;
     } else {
       y += 8;
     }
 
-    if (y + 78 > contentBottom) {
-      doc.addPage();
-      y = doc.page.margins.top;
-    }
-
     const summary = propertySummary(property);
     if (summary) {
       doc.font("Helvetica").fontSize(10).fillColor("#3d4654");
-      doc.text(summary, left, y, { width: contentWidth });
+      doc.text(summary, left, y, { width: columnWidth });
       y = doc.y + 12;
     }
 
     doc.font("Helvetica-Bold").fontSize(13).fillColor("#1f2933");
-    doc.text("Description", left, y, { width: contentWidth });
+    doc.text("Description", left, y, { width: columnWidth });
     y = doc.y + 8;
     doc.font("Helvetica").fontSize(11).fillColor("#222222");
     doc.text(description, left, y, {
-      width: contentWidth,
+      width: columnWidth,
       align: "left",
       lineGap: 3
     });
@@ -259,11 +282,10 @@ function buildPropertyBrochure(options) {
 async function writePropertyBrochure(options) {
   const loaded = [];
   const sourcePaths = Array.isArray(options.imagePaths) ? options.imagePaths : [];
-  const brochurePaths = sourcePaths.slice(1);
   const logoMark = await loadLogoMark(options.logoPath);
 
-  for (let index = 0; index < brochurePaths.length; index += 1) {
-    const image = await loadImageForPdf(brochurePaths[index]);
+  for (let index = 0; index < sourcePaths.length; index += 1) {
+    const image = await loadImageForPdf(sourcePaths[index]);
     if (image) loaded.push(await withLogoMark(image, logoMark));
   }
 

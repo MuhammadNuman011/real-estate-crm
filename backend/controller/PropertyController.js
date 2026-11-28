@@ -121,13 +121,6 @@ function removePropertyImage(storedPath) {
   if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
 }
 
-function samePaths(left, right) {
-  if (left.length !== right.length) return false;
-  return left.every(function(item, index) {
-    return item === right[index];
-  });
-}
-
 async function resolveImageList(items, currentPaths) {
   if (!Array.isArray(items)) {
     return { error: "Property pictures must be a list of images.", created: [] };
@@ -587,11 +580,6 @@ async function writeProperty(req, res, property) {
     });
   }
 
-  const descriptionChanged = !property || trimmed(property.description) !== parsed.values.description;
-  const titleChanged = !property || trimmed(property.title) !== (parsed.values.title || "");
-  const picturesChanged = !samePaths(currentPaths, images.paths);
-  const brochureMissing = !property || !property.pdf_path;
-
   let saved;
   try {
     saved = await db.transaction(async function(transaction) {
@@ -619,11 +607,8 @@ async function writeProperty(req, res, property) {
 
   cleanupImages(images.removed);
 
-  let pdfWarning = null;
-  if (!property || descriptionChanged || titleChanged || picturesChanged || brochureMissing) {
-    const company = await companyForBrochure(ownerCompanyId, req.company);
-    pdfWarning = await refreshBrochure(saved, company, images.paths);
-  }
+  const company = await companyForBrochure(ownerCompanyId, req.company);
+  const pdfWarning = await refreshBrochure(saved, company, images.paths);
 
   const payload = await withContract(saved, ownerCompanyId);
   if (pdfWarning) payload.pdf_warning = pdfWarning;
